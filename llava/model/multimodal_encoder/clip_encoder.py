@@ -64,10 +64,7 @@ class CLIPVisionTower(nn.Module):
 
     @property
     def config(self):
-        if self.is_loaded:
-            return self.vision_tower.config
-        else:
-            return self.cfg_only
+        return self.vision_tower.config if self.is_loaded else self.cfg_only
 
     @property
     def hidden_size(self):

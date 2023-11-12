@@ -66,12 +66,7 @@ class ImageMask(gr.components.Image):
                 'mask': mask_b64
             }
 
-        res = super().preprocess(x)
-        # arr -> PIL
-        # res['image'] = Image.fromarray(res['image'])
-        # if os.environ.get('IPDB_SHILONG_DEBUG', None) == 'INFO':
-        #     import ipdb; ipdb.set_trace()
-        return res
+        return super().preprocess(x)
 
 
 def get_mask_bbox(mask_img: Image):
@@ -150,41 +145,36 @@ R = partial(round, ndigits=2)
 def b64_encode(img):
     buffered = BytesIO()
     img.save(buffered, format="JPEG")
-    img_b64_str = base64.b64encode(buffered.getvalue()).decode()
-    return img_b64_str
+    return base64.b64encode(buffered.getvalue()).decode()
 
 def get_worker_addr(controller_addr, worker_name):
-    # get grounding dino addr
     if worker_name.startswith("http"):
-        sub_server_addr = worker_name
-    else:
-        controller_addr = controller_addr
-        ret = requests.post(controller_addr + "/refresh_all_workers")
-        assert ret.status_code == 200
-        ret = requests.post(controller_addr + "/list_models")
-        models = ret.json()["models"]
-        models.sort()
+        return worker_name
+    controller_addr = controller_addr
+    ret = requests.post(f"{controller_addr}/refresh_all_workers")
+    assert ret.status_code == 200
+    ret = requests.post(f"{controller_addr}/list_models")
+    models = ret.json()["models"]
+    models.sort()
         # print(f"Models: {models}")
 
-        ret = requests.post(
-            controller_addr + "/get_worker_address", json={"model": worker_name}
-        )
-        sub_server_addr = ret.json()["address"]
-    # print(f"worker_name: {worker_name}")
-    return sub_server_addr
+    ret = requests.post(
+        f"{controller_addr}/get_worker_address", json={"model": worker_name}
+    )
+    return ret.json()["address"]
 
 
 def get_conv_log_filename():
     t = datetime.datetime.now()
-    name = os.path.join(
-        LOGDIR, f"{t.year}-{t.month:02d}-{t.day:02d}-conv.json")
-    return name
+    return os.path.join(
+        LOGDIR, f"{t.year}-{t.month:02d}-{t.day:02d}-conv.json"
+    )
 
 
 def get_model_list():
-    ret = requests.post(args.controller_url + "/refresh_all_workers")
+    ret = requests.post(f"{args.controller_url}/refresh_all_workers")
     assert ret.status_code == 200
-    ret = requests.post(args.controller_url + "/list_models")
+    ret = requests.post(f"{args.controller_url}/list_models")
     models = ret.json()["models"]
     models.sort(key=lambda x: priority.get(x, x))
     logger.info(f"Models: {models}")
@@ -295,22 +285,23 @@ def change_debug_state(state, with_debug_parameter_from_state, request: gr.Reque
         value=debug_btn_value,
     )
     state_update = with_debug_parameter_from_state
-    return (state, state.to_gradio_chatbot(with_debug_parameter=with_debug_parameter_from_state), "", None) + (debug_btn_update, state_update)
+    return (
+        state,
+        state.to_gradio_chatbot(with_debug_parameter=state_update),
+        "",
+        None,
+    ) + (debug_btn_update, state_update)
 
 
 def add_text(state, text, image_dict, ref_image_dict, image_process_mode, with_debug_parameter_from_state, request: gr.Request):
     # dict_keys(['image', 'mask'])
-    if image_dict is not None:
-        image = image_dict['image']
-    else:
-        image = None
+    image = image_dict['image'] if image_dict is not None else None
     logger.info(f"add_text. ip: {request.client.host}. len: {len(text)}")
     if len(text) <= 0 and image is None:
         state.skip_next = True
         return (state, state.to_gradio_chatbot(with_debug_parameter=with_debug_parameter_from_state), "", None) + (no_change_btn,) * 5
     if args.moderate:
-        flagged = violates_moderation(text)
-        if flagged:
+        if flagged := violates_moderation(text):
             state.skip_next = True
             return (state, state.to_gradio_chatbot(with_debug_parameter=with_debug_parameter_from_state), moderation_msg, None) + (
                 no_change_btn,) * 5
@@ -330,9 +321,9 @@ def add_text(state, text, image_dict, ref_image_dict, image_process_mode, with_d
             # check if visual prompt is used
             bounding_box = get_mask_bbox(sketch_mask)
             if bounding_box is not None:
-                text_input_new = text[0] + f"\nInput box: {bounding_box}"
+                text_input_new = f"{text[0]}\nInput box: {bounding_box}"
                 text = (text_input_new, text[1], text[2], text[3])
-                
+
         if ref_image_dict is not None:
             # text = (text[0], text[1], text[2], text[3], {
             #     'ref_image': ref_image_dict['image'],

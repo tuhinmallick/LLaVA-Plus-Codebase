@@ -8,7 +8,7 @@ parser.add_argument("--dst", type=str)
 args = parser.parse_args()
 
 all_answers = []
-for line_idx, line in enumerate(open(args.src)):
+for line in open(args.src):
     res = json.loads(line)
     question_id = res['question_id']
     text = res['text'].rstrip('.').lower()

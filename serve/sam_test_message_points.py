@@ -38,17 +38,16 @@ def load_image(image_path):
 def encode(image: Image):
     buffered = BytesIO()
     image.save(buffered, format="JPEG")
-    img_b64_str = base64.b64encode(buffered.getvalue()).decode()
-    return img_b64_str
+    return base64.b64encode(buffered.getvalue()).decode()
 
 def show_mask(mask, image, random_color=True):
     if random_color:
         color = np.concatenate([np.random.random(3), np.array([0.8])], axis=0)
     else:
-        color = np.array([30/255, 144/255, 255/255, 0.6])
+        color = np.array([30/255, 144/255, 1, 0.6])
     h, w = mask.shape[-2:]
     mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
-    
+
     annotated_frame_pil = Image.fromarray(image).convert("RGBA")
     mask_image_pil = Image.fromarray((mask_image.cpu().numpy() * 255).astype(np.uint8)).convert("RGBA")
 
@@ -61,14 +60,14 @@ def main():
         worker_addr = args.worker_address
     else:
         controller_addr = args.controller_address
-        ret = requests.post(controller_addr + "/refresh_all_workers")
-        ret = requests.post(controller_addr + "/list_models")
+        ret = requests.post(f"{controller_addr}/refresh_all_workers")
+        ret = requests.post(f"{controller_addr}/list_models")
         models = ret.json()["models"]
         models.sort()
         print(f"Models: {models}")
 
         ret = requests.post(
-            controller_addr + "/get_worker_address", json={"model": model_name}
+            f"{controller_addr}/get_worker_address", json={"model": model_name}
         )
         worker_addr = ret.json()["address"]
         print(f"worker_addr: {worker_addr}")
@@ -90,7 +89,7 @@ def main():
     point_labels = (np.random.rand(1, 3) > 0.5).astype(np.int32).tolist()
     if sum(point_labels[0]) == 0:
         point_labels[0][random.randint(0, 2)] = 1
-    
+
 
 
     datas = {
@@ -101,9 +100,7 @@ def main():
     }
     tic = time.time()
     response = requests.post(
-        worker_addr + "/worker_generate",
-        headers=headers,
-        json=datas,
+        f"{worker_addr}/worker_generate", headers=headers, json=datas
     )
     toc = time.time()
     print(f"Time: {toc - tic:.3f}s")

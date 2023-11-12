@@ -37,76 +37,56 @@ def eval_model(args):
     questions = get_chunk(questions, args.num_chunks, args.chunk_idx)
     answers_file = os.path.expanduser(args.answers_file)
     os.makedirs(os.path.dirname(answers_file), exist_ok=True)
-    ans_file = open(answers_file, "w")
-    for i, line in enumerate(tqdm(questions)):
-        idx = line["id"]
-        question = line['conversations'][0]
-        qs = question['value'].replace('<image>', '').strip()
-        cur_prompt = qs
+    with open(answers_file, "w") as ans_file:
+        for line in tqdm(questions):
+            idx = line["id"]
+            question = line['conversations'][0]
+            qs = question['value'].replace('<image>', '').strip()
+            cur_prompt = qs
 
-        if 'image' in line:
-            image_file = line["image"]
-            image = Image.open(os.path.join(args.image_folder, image_file))
-            image_tensor = image_processor.preprocess(image, return_tensors='pt')['pixel_values'][0]
-            images = image_tensor.unsqueeze(0).half().cuda()
-            if getattr(model.config, 'mm_use_im_start_end', False):
-                qs = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN + '\n' + qs
+            if 'image' in line:
+                image_file = line["image"]
+                image = Image.open(os.path.join(args.image_folder, image_file))
+                image_tensor = image_processor.preprocess(image, return_tensors='pt')['pixel_values'][0]
+                images = image_tensor.unsqueeze(0).half().cuda()
+                qs = (
+                    DEFAULT_IM_START_TOKEN
+                    + DEFAULT_IMAGE_TOKEN
+                    + DEFAULT_IM_END_TOKEN
+                    + '\n'
+                    + qs
+                    if getattr(model.config, 'mm_use_im_start_end', False)
+                    else DEFAULT_IMAGE_TOKEN + '\n' + qs
+                )
+                cur_prompt = '<image>' + '\n' + cur_prompt
             else:
-                qs = DEFAULT_IMAGE_TOKEN + '\n' + qs
-            cur_prompt = '<image>' + '\n' + cur_prompt
-        else:
-            images = None
+                images = None
 
-        if args.single_pred_prompt:
-            qs = qs + '\n' + "Answer with the option's letter from the given choices directly."
-            cur_prompt = cur_prompt + '\n' + "Answer with the option's letter from the given choices directly."
+            if args.single_pred_prompt:
+                qs = qs + '\n' + "Answer with the option's letter from the given choices directly."
+                cur_prompt = cur_prompt + '\n' + "Answer with the option's letter from the given choices directly."
 
-        conv = conv_templates[args.conv_mode].copy()
-        conv.append_message(conv.roles[0], qs)
-        conv.append_message(conv.roles[1], None)
-        prompt = conv.get_prompt()
+            conv = conv_templates[args.conv_mode].copy()
+            conv.append_message(conv.roles[0], qs)
+            conv.append_message(conv.roles[1], None)
+            prompt = conv.get_prompt()
 
-        input_ids = tokenizer_image_token(prompt, tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt').unsqueeze(0).cuda()
+            input_ids = tokenizer_image_token(prompt, tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt').unsqueeze(0).cuda()
 
-        stop_str = conv.sep if conv.sep_style != SeparatorStyle.TWO else conv.sep2
-        keywords = [stop_str]
-        stopping_criteria = [KeywordsStoppingCriteria(keywords, tokenizer, input_ids)] if conv.version == "v0" else None
-
-        with torch.inference_mode():
-            output_ids = model.generate(
-                input_ids,
-                images=images,
-                do_sample=True if args.temperature > 0 else False,
-                temperature=args.temperature,
-                max_new_tokens=1024,
-                use_cache=True,
-                stopping_criteria=stopping_criteria,
-            )
-
-        input_token_len = input_ids.shape[1]
-        n_diff_input_output = (input_ids != output_ids[:, :input_token_len]).sum().item()
-        if n_diff_input_output > 0:
-            print(f'[Warning] {n_diff_input_output} output_ids are not the same as the input_ids')
-        outputs = tokenizer.batch_decode(output_ids[:, input_token_len:], skip_special_tokens=True)[0]
-        outputs = outputs.strip()
-        if outputs.endswith(stop_str):
-            outputs = outputs[:-len(stop_str)]
-        outputs = outputs.strip()
-
-        # prompt for answer
-        if args.answer_prompter:
-            outputs_reasoning = outputs
-            input_ids = tokenizer_image_token(prompt + outputs_reasoning + ' ###\nANSWER:', tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt').unsqueeze(0).cuda()
+            stop_str = conv.sep if conv.sep_style != SeparatorStyle.TWO else conv.sep2
+            keywords = [stop_str]
+            stopping_criteria = [KeywordsStoppingCriteria(keywords, tokenizer, input_ids)] if conv.version == "v0" else None
 
             with torch.inference_mode():
                 output_ids = model.generate(
                     input_ids,
                     images=images,
-                    do_sample=True if args.temperature > 0 else False,
+                    do_sample=args.temperature > 0,
                     temperature=args.temperature,
-                    max_new_tokens=64,
+                    max_new_tokens=1024,
                     use_cache=True,
-                    stopping_criteria=[stopping_criteria])
+                    stopping_criteria=stopping_criteria,
+                )
 
             input_token_len = input_ids.shape[1]
             n_diff_input_output = (input_ids != output_ids[:, :input_token_len]).sum().item()
@@ -117,17 +97,42 @@ def eval_model(args):
             if outputs.endswith(stop_str):
                 outputs = outputs[:-len(stop_str)]
             outputs = outputs.strip()
-            outputs = outputs_reasoning + '\n The answer is ' + outputs
 
-        ans_id = shortuuid.uuid()
-        ans_file.write(json.dumps({"question_id": idx,
-                                   "prompt": cur_prompt,
-                                   "text": outputs,
-                                   "answer_id": ans_id,
-                                   "model_id": model_name,
-                                   "metadata": {}}) + "\n")
-        ans_file.flush()
-    ans_file.close()
+                    # prompt for answer
+            if args.answer_prompter:
+                outputs_reasoning = outputs
+                input_ids = tokenizer_image_token(prompt + outputs_reasoning + ' ###\nANSWER:', tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt').unsqueeze(0).cuda()
+
+                with torch.inference_mode():
+                    output_ids = model.generate(
+                        input_ids,
+                        images=images,
+                        do_sample=args.temperature > 0,
+                        temperature=args.temperature,
+                        max_new_tokens=64,
+                        use_cache=True,
+                        stopping_criteria=[stopping_criteria],
+                    )
+
+                input_token_len = input_ids.shape[1]
+                n_diff_input_output = (input_ids != output_ids[:, :input_token_len]).sum().item()
+                if n_diff_input_output > 0:
+                    print(f'[Warning] {n_diff_input_output} output_ids are not the same as the input_ids')
+                outputs = tokenizer.batch_decode(output_ids[:, input_token_len:], skip_special_tokens=True)[0]
+                outputs = outputs.strip()
+                if outputs.endswith(stop_str):
+                    outputs = outputs[:-len(stop_str)]
+                outputs = outputs.strip()
+                outputs = outputs_reasoning + '\n The answer is ' + outputs
+
+            ans_id = shortuuid.uuid()
+            ans_file.write(json.dumps({"question_id": idx,
+                                       "prompt": cur_prompt,
+                                       "text": outputs,
+                                       "answer_id": ans_id,
+                                       "model_id": model_name,
+                                       "metadata": {}}) + "\n")
+            ans_file.flush()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

@@ -54,30 +54,29 @@ def convert_to_jsonl(base_dir, split, prompt_format="QCM-LEPA"):
         problems, split_indices, prompt_format,
         use_caption=False, is_test=False)
 
-    writer = open(os.path.join(base_dir, f"scienceqa_{split}_{prompt_format}.jsonl"), "w")
-    for prob_id, (input, output) in split_problems.items():
-        if input.startswith('Question: '):
-            input = input.replace('Question: ', '')
-        if output.startswith('Answer: '):
-            output = output.replace('Answer: ', '')
+    with open(os.path.join(base_dir, f"scienceqa_{split}_{prompt_format}.jsonl"), "w") as writer:
+        for prob_id, (input, output) in split_problems.items():
+            if input.startswith('Question: '):
+                input = input.replace('Question: ', '')
+            if output.startswith('Answer: '):
+                output = output.replace('Answer: ', '')
 
-        raw_prob_data = problems[prob_id]
-        if raw_prob_data['image'] is None:
-            data = {
-                "id": prob_id,
-                "instruction": f"{input}",
-                "output": f"{output}",
-            }
+            raw_prob_data = problems[prob_id]
+            if raw_prob_data['image'] is None:
+                data = {
+                    "id": prob_id,
+                    "instruction": f"{input}",
+                    "output": f"{output}",
+                }
 
-        else:
-            data = {
-                "id": prob_id,
-                "image": os.path.join(prob_id, raw_prob_data['image']),
-                "instruction": f"{input}\n<image>",
-                "output": f"{output}",
-            }
-        writer.write(json.dumps(data) + '\n')
-    writer.close()
+            else:
+                data = {
+                    "id": prob_id,
+                    "image": os.path.join(prob_id, raw_prob_data['image']),
+                    "instruction": f"{input}\n<image>",
+                    "output": f"{output}",
+                }
+            writer.write(json.dumps(data) + '\n')
 
 
 def main(task, **kwargs):

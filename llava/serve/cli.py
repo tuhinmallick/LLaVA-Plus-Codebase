@@ -16,12 +16,12 @@ from transformers import TextStreamer
 
 
 def load_image(image_file):
-    if image_file.startswith('http://') or image_file.startswith('https://'):
-        response = requests.get(image_file)
-        image = Image.open(BytesIO(response.content)).convert('RGB')
-    else:
-        image = Image.open(image_file).convert('RGB')
-    return image
+    if not image_file.startswith('http://') and not image_file.startswith(
+        'https://'
+    ):
+        return Image.open(image_file).convert('RGB')
+    response = requests.get(image_file)
+    return Image.open(BytesIO(response.content)).convert('RGB')
 
 
 def main(args):
@@ -41,16 +41,14 @@ def main(args):
         conv_mode = "llava_v0"
 
     if args.conv_mode is not None and conv_mode != args.conv_mode:
-        print('[WARNING] the auto inferred conversation mode is {}, while `--conv-mode` is {}, using {}'.format(conv_mode, args.conv_mode, args.conv_mode))
+        print(
+            f'[WARNING] the auto inferred conversation mode is {conv_mode}, while `--conv-mode` is {args.conv_mode}, using {args.conv_mode}'
+        )
     else:
         args.conv_mode = conv_mode
 
     conv = conv_templates[args.conv_mode].copy()
-    if "mpt" in model_name.lower():
-        roles = ('user', 'assistant')
-    else:
-        roles = conv.roles
-
+    roles = ('user', 'assistant') if "mpt" in model_name.lower() else conv.roles
     image = load_image(args.image_file)
     # Similar operation in model_worker.py
     image_tensor = process_images([image], image_processor, model.config)
@@ -94,12 +92,13 @@ def main(args):
             output_ids = model.generate(
                 input_ids,
                 images=image_tensor,
-                do_sample=True if args.temperature > 0 else False,
+                do_sample=args.temperature > 0,
                 temperature=args.temperature,
                 max_new_tokens=args.max_new_tokens,
                 streamer=streamer,
                 use_cache=True,
-                stopping_criteria=[stopping_criteria])
+                stopping_criteria=[stopping_criteria],
+            )
 
         outputs = tokenizer.decode(output_ids[0, input_ids.shape[1]:]).strip()
         conv.messages[-1][-1] = outputs

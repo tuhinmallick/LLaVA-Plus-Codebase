@@ -1,25 +1,20 @@
 def get_question_text(problem):
-    question = problem['question']
-    return question
+    return problem['question']
 
 
 def get_context_text(problem, use_caption):
     txt_context = problem['hint']
     img_context = problem['caption'] if use_caption else ""
     context = " ".join([txt_context, img_context]).strip()
-    if context == "":
+    if not context:
         context = "N/A"
     return context
 
 
 def get_choice_text(probelm, options):
     choices = probelm['choices']
-    choice_list = []
-    for i, c in enumerate(choices):
-        choice_list.append("({}) {}".format(options[i], c))
-    choice_txt = " ".join(choice_list)
-    #print(choice_txt)
-    return choice_txt
+    choice_list = [f"({options[i]}) {c}" for i, c in enumerate(choices)]
+    return " ".join(choice_list)
 
 
 def get_answer(problem, options):
@@ -27,15 +22,11 @@ def get_answer(problem, options):
 
 
 def get_lecture_text(problem):
-    # \\n: GPT-3 can generate the lecture with more tokens.
-    lecture = problem['lecture'].replace("\n", "\\n")
-    return lecture
+    return problem['lecture'].replace("\n", "\\n")
 
 
 def get_solution_text(problem):
-    # \\n: GPT-3 can generate the solution with more tokens
-    solution = problem['solution'].replace("\n", "\\n")
-    return solution
+    return problem['solution'].replace("\n", "\\n")
 
 
 def create_one_example_chatbot(format, question, context, choice, answer, lecture, solution, test_example=True):
@@ -282,10 +273,7 @@ def build_prompt(problems, shot_qids, test_qid, args):
                                       test_example=True)
     examples.append(test_example)
 
-    # create the prompt input
-    prompt_input = '\n\n'.join(examples)
-
-    return prompt_input
+    return '\n\n'.join(examples)
 
 
 def build_prompt_gpt4(problems, shot_qids, test_qid, args):
@@ -309,9 +297,7 @@ def build_prompt_gpt4(problems, shot_qids, test_qid, args):
                                            lecture,
                                            solution,
                                            test_example=False)
-        prompt_array.append(user_prompt)
-        prompt_array.append(assistant_prompt)
-
+        prompt_array.extend((user_prompt, assistant_prompt))
     # test example
     question = get_question_text(problems[test_qid])
     context = get_context_text(problems[test_qid], args.use_caption)
@@ -328,7 +314,5 @@ def build_prompt_gpt4(problems, shot_qids, test_qid, args):
                                       lecture,
                                       solution,
                                       test_example=True)
-    prompt_array.append(user_prompt)
-    prompt_array.append(assistant_prompt)
-
+    prompt_array.extend((user_prompt, assistant_prompt))
     return prompt_array

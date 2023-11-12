@@ -41,10 +41,7 @@ class MPTModel(MPTPreTrainedModel):
         self.alibi = config.attn_config['alibi']
         self.alibi_bias_max = config.attn_config['alibi_bias_max']
         if config.init_device == 'mixed':
-            if dist.get_local_rank() == 0:
-                config.init_device = 'cpu'
-            else:
-                config.init_device = 'meta'
+            config.init_device = 'cpu' if dist.get_local_rank() == 0 else 'meta'
         if config.norm_type.lower() not in NORM_CLASS_REGISTRY.keys():
             norm_options = ' | '.join(NORM_CLASS_REGISTRY.keys())
             raise NotImplementedError(f'Requested norm type ({config.norm_type}) is not implemented within this repo (Options: {norm_options}).')
@@ -119,7 +116,10 @@ class MPTModel(MPTPreTrainedModel):
     def _apply_prefix_mask(self, attn_bias: torch.Tensor, prefix_mask: torch.Tensor):
         (s_k, s_q) = attn_bias.shape[-2:]
         if s_k != self.config.max_seq_len or s_q != self.config.max_seq_len:
-            raise ValueError('attn_bias does not match the expected shape. ' + f'The last two dimensions should both be {self.config.max_length} ' + f'but are {s_k} and {s_q}.')
+            raise ValueError(
+                f'attn_bias does not match the expected shape. The last two dimensions should both be {self.config.max_length} '
+                + f'but are {s_k} and {s_q}.'
+            )
         seq_len = prefix_mask.shape[-1]
         if seq_len > self.config.max_seq_len:
             raise ValueError(f'prefix_mask sequence length cannot exceed max_seq_len={self.config.max_seq_len}')
@@ -177,7 +177,9 @@ class MPTModel(MPTPreTrainedModel):
             past_position = 0
             if past_key_values is not None:
                 if len(past_key_values) != self.config.n_layers:
-                    raise ValueError(f'past_key_values must provide a past_key_value for each attention ' + f'layer in the network (len(past_key_values)={len(past_key_values)!r}; self.config.n_layers={self.config.n_layers!r}).')
+                    raise ValueError(
+                        f'past_key_values must provide a past_key_value for each attention layer in the network (len(past_key_values)={len(past_key_values)!r}; self.config.n_layers={self.config.n_layers!r}).'
+                    )
                 past_position = past_key_values[0][0].size(1)
                 if self.attn_impl == 'torch':
                     past_position = past_key_values[0][0].size(3)
@@ -325,7 +327,9 @@ class MPTForCausalLM(MPTPreTrainedModel):
         See https://github.com/huggingface/transformers/blob/3ec7a47664ebe40c40f4b722f6bb1cd30c3821ec/src/transformers/models/gpt2/modeling_gpt2.py#L1122-L1133
         for an example in transformers.
         """
-        reordered_past = []
-        for layer_past in past_key_values:
-            reordered_past += [tuple((past_state.index_select(0, beam_idx) for past_state in layer_past))]
-        return reordered_past
+        return [
+            tuple(
+                (past_state.index_select(0, beam_idx) for past_state in layer_past)
+            )
+            for layer_past in past_key_values
+        ]

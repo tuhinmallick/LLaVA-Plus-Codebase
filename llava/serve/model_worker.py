@@ -54,7 +54,7 @@ class ModelWorker:
         if model_name is None:
             model_paths = model_path.split("/")
             if model_paths[-1].startswith('checkpoint-'):
-                self.model_name = model_paths[-2] + "_" + model_paths[-1]
+                self.model_name = f"{model_paths[-2]}_{model_paths[-1]}"
             else:
                 self.model_name = model_paths[-1]
         else:
@@ -75,7 +75,7 @@ class ModelWorker:
     def register_to_controller(self):
         logger.info("Register to controller")
 
-        url = self.controller_addr + "/register_worker"
+        url = f"{self.controller_addr}/register_worker"
         data = {
             "worker_name": self.worker_addr,
             "check_heart_beat": True,
@@ -89,7 +89,7 @@ class ModelWorker:
                     f"Semaphore: {pretty_print_semaphore(model_semaphore)}. "
                     f"global_counter: {global_counter}")
 
-        url = self.controller_addr + "/receive_heart_beat"
+        url = f"{self.controller_addr}/receive_heart_beat"
 
         while True:
             try:
@@ -128,26 +128,23 @@ class ModelWorker:
         images = params.get("images", None)
         num_image_tokens = 0
         if images is not None and len(images) > 0 and self.is_multimodal:
-            if len(images) > 0:
-                if len(images) != prompt.count(DEFAULT_IMAGE_TOKEN):
-                    raise ValueError("Number of images does not match number of <image> tokens in prompt")
+            if len(images) != prompt.count(DEFAULT_IMAGE_TOKEN):
+                raise ValueError("Number of images does not match number of <image> tokens in prompt")
 
-                images = [load_image_from_base64(image) for image in images]
-                images = process_images(images, image_processor, model.config)
+            images = [load_image_from_base64(image) for image in images]
+            images = process_images(images, image_processor, model.config)
 
-                if type(images) is list:
-                    images = [image.to(self.model.device, dtype=torch.float16) for image in images]
-                else:
-                    images = images.to(self.model.device, dtype=torch.float16)
-
-                replace_token = DEFAULT_IMAGE_TOKEN
-                if getattr(self.model.config, 'mm_use_im_start_end', False):
-                    replace_token = DEFAULT_IM_START_TOKEN + replace_token + DEFAULT_IM_END_TOKEN
-                prompt = prompt.replace(DEFAULT_IMAGE_TOKEN, replace_token)
-
-                num_image_tokens = prompt.count(replace_token) * model.get_vision_tower().num_patches
+            if type(images) is list:
+                images = [image.to(self.model.device, dtype=torch.float16) for image in images]
             else:
-                images = None
+                images = images.to(self.model.device, dtype=torch.float16)
+
+            replace_token = DEFAULT_IMAGE_TOKEN
+            if getattr(self.model.config, 'mm_use_im_start_end', False):
+                replace_token = DEFAULT_IM_START_TOKEN + replace_token + DEFAULT_IM_END_TOKEN
+            prompt = prompt.replace(DEFAULT_IMAGE_TOKEN, replace_token)
+
+            num_image_tokens = prompt.count(replace_token) * model.get_vision_tower().num_patches
             image_args = {"images": images}
         else:
             images = None
@@ -158,7 +155,7 @@ class ModelWorker:
         max_context_length = getattr(model.config, 'max_position_embeddings', 2048)
         max_new_tokens = min(int(params.get("max_new_tokens", 256)), 1024)
         stop_str = params.get("stop", None)
-        do_sample = True if temperature > 0.001 else False
+        do_sample = temperature > 0.001
 
         input_ids = tokenizer_image_token(prompt, tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt').unsqueeze(0).to(self.device)
         keywords = [stop_str]
@@ -168,7 +165,12 @@ class ModelWorker:
         max_new_tokens = min(max_new_tokens, max_context_length - input_ids.shape[-1] - num_image_tokens)
 
         if max_new_tokens < 1:
-            yield json.dumps({"text": ori_prompt + "Exceeds max token length. Please start a new conversation, thanks.", "error_code": 0}).encode() + b"\0"
+            yield json.dumps(
+                {
+                    "text": f"{ori_prompt}Exceeds max token length. Please start a new conversation, thanks.",
+                    "error_code": 0,
+                }
+            ).encode() + b"\0"
             return
 
         thread = Thread(target=model.generate, kwargs=dict(
@@ -193,8 +195,7 @@ class ModelWorker:
 
     def generate_stream_gate(self, params):
         try:
-            for x in self.generate_stream(params):
-                yield x
+            yield from self.generate_stream(params)
         except ValueError as e:
             print("Caught ValueError:", e)
             ret = {

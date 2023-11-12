@@ -59,16 +59,9 @@ if __name__ == "__main__":
 
         pattern = re.compile(r'The answer is ([A-Z]).')
         our_res = pattern.findall(our_pred)
-        if len(our_res) == 1:
-            our_answer = our_res[0]  # 'A', 'B', ...
-        else:
-            our_answer = "FAILED"
+        our_answer = our_res[0] if len(our_res) == 1 else "FAILED"
         gpt4_res = pattern.findall(gpt4_pred)
-        if len(gpt4_res) == 1:
-            gpt4_answer = gpt4_res[0]  # 'A', 'B', ...
-        else:
-            gpt4_answer = "FAILED"
-
+        gpt4_answer = gpt4_res[0] if len(gpt4_res) == 1 else "FAILED"
         our_pred_idx = get_pred_idx(our_answer, prob['choices'], args.options)
         gpt4_pred_idx = get_pred_idx(gpt4_answer, prob['choices'], args.options)
 
@@ -82,9 +75,6 @@ if __name__ == "__main__":
             #     print(f'LECTURE: {prob["lecture"]}')
             #     print(f'SOLUTION: {prob["solution"]}')
             #     print('=====================')
-        else:
-            # continue
-            pass
         # gpt4_pred_idx = our_pred_idx
 
         if gpt4_pred_idx == prob['answer']:

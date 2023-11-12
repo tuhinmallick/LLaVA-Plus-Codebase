@@ -64,10 +64,7 @@ if __name__ == "__main__":
     with open(args.result_upload_file, 'w') as fp:
         for question in data['questions']:
             qid = question['question_id']
-            if qid in results:
-                result = results[qid]
-            else:
-                result = results[int(qid)]
+            result = results[qid] if qid in results else results[int(qid)]
             fp.write(json.dumps({
                 'question_id': qid,
                 'prediction': result['text']

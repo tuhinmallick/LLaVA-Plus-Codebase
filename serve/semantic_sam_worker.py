@@ -66,8 +66,7 @@ def prepare_image(image_pth):
         image = Image.open(image_pth).convert('RGB')
     else:
         image = Image.open(BytesIO(base64.b64decode(image_pth))).convert("RGB")
-    t = []
-    t.append(transforms.Resize(640, interpolation=Image.BICUBIC))
+    t = [transforms.Resize(640, interpolation=Image.BICUBIC)]
     transform1 = transforms.Compose(t)
     image_ori = transform1(image)
 
@@ -107,7 +106,7 @@ class ModelWorker:
     def register_to_controller(self):
         logger.info("Register to controller")
 
-        url = self.controller_addr + "/register_worker"
+        url = f"{self.controller_addr}/register_worker"
         data = {
             "worker_name": self.worker_addr,
             "check_heart_beat": True,
@@ -124,7 +123,7 @@ class ModelWorker:
             f"worker_id: {worker_id}. "
         )
 
-        url = self.controller_addr + "/receive_heart_beat"
+        url = f"{self.controller_addr}/receive_heart_beat"
 
         while True:
             try:
@@ -174,10 +173,7 @@ class ModelWorker:
         else:
             assert 'boxes' in params
             box_prompt = params["boxes"]
-            # centers
-            point_prompt = []
-            for box in box_prompt:
-                point_prompt.append([(box[0]+box[2])/2, (box[1]+box[3])/2])
+            point_prompt = [[(box[0]+box[2])/2, (box[1]+box[3])/2] for box in box_prompt]
         image_path = params["image"]
         model_type = model_type
         model_ckpt = model_path
@@ -187,7 +183,7 @@ class ModelWorker:
         original_image, input_image = prepare_image(image_path)  # change the image path to your image
         mask_generator = SemanticSAMPredictor(build_semantic_sam(model_type=model_type, ckpt=model_ckpt)) # model_type: 'L' / 'T', depends on your checkpint
         iou_sort_masks, area_sort_masks = mask_generator.predict_masks(original_image, input_image, point=point_prompt) # input point [[w, h]] relative location, i.e, [[0.5, 0.5]] is the center of the image
-        
+
         # 创建一个BytesIO对象，用于临时存储图像数据
         image_data = io.BytesIO()
         sum_0=np.array(iou_sort_masks[0]).sum()
@@ -201,14 +197,10 @@ class ModelWorker:
             image_data_bytes = image_data.getvalue()
             # 将图像数据编码为Base64字符串
             encoded_image = base64.b64encode(image_data_bytes).decode('utf-8')
-            
-            mask_List.append(encoded_image)
-        
-        pred_dict = {
-            "iou_sort_masks": mask_List
-        }
 
-        return pred_dict
+            mask_List.append(encoded_image)
+
+        return {"iou_sort_masks": mask_List}
 
     def generate_gate(self, params):
         try:

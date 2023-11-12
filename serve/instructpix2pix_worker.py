@@ -71,8 +71,7 @@ model_semaphore = None
 def encode(image: Image):
     buffered = BytesIO()
     image.save(buffered, format="JPEG")
-    img_b64_str = base64.b64encode(buffered.getvalue()).decode()
-    return img_b64_str
+    return base64.b64encode(buffered.getvalue()).decode()
 
 
 def heart_beat_worker(controller):
@@ -126,7 +125,7 @@ class ModelWorker:
     def register_to_controller(self):
         logger.info("Register to controller")
 
-        url = self.controller_addr + "/register_worker"
+        url = f"{self.controller_addr}/register_worker"
         data = {
             "worker_name": self.worker_addr,
             "check_heart_beat": True,
@@ -143,7 +142,7 @@ class ModelWorker:
             f"worker_id: {worker_id}. "
         )
 
-        url = self.controller_addr + "/receive_heart_beat"
+        url = f"{self.controller_addr}/receive_heart_beat"
 
         while True:
             try:
@@ -188,13 +187,11 @@ class ModelWorker:
     def load_image(self, image_path: str) -> Tuple[np.array, torch.Tensor]:
         
 
-        if os.path.exists(image_path):
-            image_source = Image.open(image_path).convert("RGB")
-        else:
-            # base64 coding
-            image_source = Image.open(BytesIO(base64.b64decode(image_path))).convert("RGB")
-
-        return image_source
+        return (
+            Image.open(image_path).convert("RGB")
+            if os.path.exists(image_path)
+            else Image.open(BytesIO(base64.b64decode(image_path))).convert("RGB")
+        )
 
     def generate_stream_func(self, model, params, device):
         # get inputs
@@ -215,14 +212,9 @@ class ModelWorker:
         # re-resize
         image = self.resize(image, w, h)
 
-        # save image
-        # images[0].save("test.jpg")
-
-        pred_dict = {
+        return {
             "edited_image": encode(image),
         }
-
-        return pred_dict
 
     def generate_gate(self, params):
         try:

@@ -186,8 +186,10 @@ class EvalAIAnswerProcessor:
     def process_punctuation(self, in_text):
         out_text = in_text
         for p in self.PUNCTUATIONS:
-            if (p + " " in in_text or " " + p in in_text) or (
-                re.search(self.COMMA_STRIP, in_text) is not None
+            if (
+                f"{p} " in in_text
+                or f" {p}" in in_text
+                or re.search(self.COMMA_STRIP, in_text) is not None
             ):
                 out_text = out_text.replace(p, "")
             else:
@@ -202,13 +204,10 @@ class EvalAIAnswerProcessor:
             word = self.NUMBER_MAP.setdefault(word, word)
             if word not in self.ARTICLES:
                 out_text.append(word)
-            else:
-                pass
         for word_id, word in enumerate(out_text):
             if word in self.CONTRACTIONS:
                 out_text[word_id] = self.CONTRACTIONS[word]
-        out_text = " ".join(out_text)
-        return out_text
+        return " ".join(out_text)
 
     def __call__(self, item):
         item = self.word_tokenize(item)
@@ -253,8 +252,7 @@ class TextVQAAccuracyEvaluator:
             score = unique_answer_scores.get(pred_answer, 0.0)
             pred_scores.append(score)
 
-        accuracy = sum(pred_scores) / len(pred_scores)
-        return accuracy
+        return sum(pred_scores) / len(pred_scores)
 
 
 class STVQAAccuracyEvaluator:
@@ -269,8 +267,7 @@ class STVQAAccuracyEvaluator:
             score = 1.0 if pred_answer in gts else 0.0
             pred_scores.append(score)
 
-        accuracy = sum(pred_scores) / len(pred_scores)
-        return accuracy
+        return sum(pred_scores) / len(pred_scores)
 
 
 class STVQAANLSEvaluator:
@@ -283,8 +280,7 @@ class STVQAANLSEvaluator:
         s1 = s1.lower().strip()
         s2 = s2.lower().strip()
         iou = 1 - self.get_edit_distance(s1, s2) / max(len(s1), len(s2))
-        anls = iou if iou >= 0.5 else 0.0
-        return anls
+        return iou if iou >= 0.5 else 0.0
 
     def eval_pred_list(self, pred_list):
         pred_scores = []
@@ -294,8 +290,7 @@ class STVQAANLSEvaluator:
             )
             pred_scores.append(anls)
 
-        accuracy = sum(pred_scores) / len(pred_scores)
-        return accuracy
+        return sum(pred_scores) / len(pred_scores)
 
 
 class TextCapsBleu4Evaluator:
@@ -330,5 +325,4 @@ class TextCapsBleu4Evaluator:
         res = self.tokenizer.tokenize(res)
         score, _ = self.scorer.compute_score(gts, res)
 
-        bleu4 = score[3]  # score is (Bleu-1, Bleu-2, Bleu-3, Bleu-4)
-        return bleu4
+        return score[3]

@@ -113,7 +113,7 @@ class ModelWorker:
     def register_to_controller(self):
         logger.info("Register to controller")
 
-        url = self.controller_addr + "/register_worker"
+        url = f"{self.controller_addr}/register_worker"
         data = {
             "worker_name": self.worker_addr,
             "check_heart_beat": True,
@@ -130,7 +130,7 @@ class ModelWorker:
             f"worker_id: {worker_id}. "
         )
 
-        url = self.controller_addr + "/receive_heart_beat"
+        url = f"{self.controller_addr}/receive_heart_beat"
 
         while True:
             try:
@@ -188,19 +188,25 @@ class ModelWorker:
     def generate_stream_func(self, model, params, device):
         # get inputs
         image_path = params["image"]
-        
+
         boxes = params.get("boxes", None)                   # b, 4
         points = params.get("points", None)                 # b, n, 2
         point_labels = params.get("point_labels", None)     # b, n. (1 indicates a foreground point and 0 indicates a background point.) 
 
-        assert not (boxes is None and points is None), "boxes and points cannot be both None"
-        assert not (boxes is not None and points is not None), "boxes and points cannot be both not None"
+        assert (
+            boxes is not None or points is not None
+        ), "boxes and points cannot be both None"
+        assert (
+            boxes is None or points is None
+        ), "boxes and points cannot be both not None"
 
         image_np, _ = self.load_image(image_path)
         h, w, _ = image_np.shape
 
         # add sam output
         if boxes is not None:
+            # encoder masks to strs
+            maskrls_list = []
             if len(boxes) > 0:
                 boxes_tensor = torch.Tensor(boxes).to(device)
                 boxes_xyxy = boxes_tensor * torch.Tensor([w, h, w, h]).to(device)
@@ -215,16 +221,14 @@ class ModelWorker:
                         )
                 masks = masks[:, 0] # B, H, W
 
-                # encoder masks to strs
-                maskrls_list = []
                 for mask in masks:
                     mask_rle = mask_util.encode(np.array(mask[:, :, None].cpu(), order="F"))[0]
                     mask_rle["counts"] = mask_rle["counts"].decode("utf-8")
                     maskrls_list.append(mask_rle)
-            else:
-                maskrls_list = []
         elif points is not None:
             assert point_labels is not None, "point_labels cannot be None when points is not None"
+            # encoder masks to strs
+            maskrls_list = []
             if len(points) > 0:
                 points_tensor = torch.Tensor(points).to(device) * torch.Tensor([w, h]).to(device)
                 self.sam_predictor.set_image(image_np)
@@ -240,19 +244,11 @@ class ModelWorker:
                         )
                 masks = masks[:, 0] # B, H, W
 
-                # encoder masks to strs
-                maskrls_list = []
                 for mask in masks:
                     mask_rle = mask_util.encode(np.array(mask[:, :, None].cpu(), order="F"))[0]
                     mask_rle["counts"] = mask_rle["counts"].decode("utf-8")
                     maskrls_list.append(mask_rle)
-            else:
-                maskrls_list = []            
-        
-        pred_dict = {}
-        pred_dict['masks_rle'] = maskrls_list
-        pred_dict['boxes'] = boxes
-        return pred_dict
+        return {'masks_rle': maskrls_list, 'boxes': boxes}
 
     def generate_gate(self, params):
         try:
@@ -282,8 +278,6 @@ class ModelWorker:
             is_llama = "llama" in str(
                 type(self.model)
             )  # vicuna support batch inference
-            is_chatglm = "chatglm" in str(type(self.model))
-            is_t5 = "t5" in str(type(self.model))
             if is_llama:
                 encoding = tokenizer.batch_encode_plus(
                     params["input"], padding=True, return_tensors="pt"
@@ -307,6 +301,8 @@ class ModelWorker:
             else:
                 embedding = []
                 token_num = 0
+                is_chatglm = "chatglm" in str(type(self.model))
+                is_t5 = "t5" in str(type(self.model))
                 for text in params["input"]:
                     input_ids = tokenizer.encode(text, return_tensors="pt").to(
                         self.device

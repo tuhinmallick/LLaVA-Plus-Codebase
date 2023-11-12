@@ -110,7 +110,7 @@ class ModelWorker:
     def register_to_controller(self):
         logger.info("Register to controller")
 
-        url = self.controller_addr + "/register_worker"
+        url = f"{self.controller_addr}/register_worker"
         data = {
             "worker_name": self.worker_addr,
             "check_heart_beat": True,
@@ -127,7 +127,7 @@ class ModelWorker:
             f"worker_id: {worker_id}. "
         )
 
-        url = self.controller_addr + "/receive_heart_beat"
+        url = f"{self.controller_addr}/receive_heart_beat"
 
         while True:
             try:
@@ -171,12 +171,11 @@ class ModelWorker:
 
     def load_image(self, image_path: str) -> Tuple[np.array, torch.Tensor]:
 
-        if os.path.exists(image_path):
-            image_source = Image.open(image_path).convert("RGB")
-        else:
-            # base64 coding
-            image_source = Image.open(BytesIO(base64.b64decode(image_path))).convert("RGB")
-        return image_source
+        return (
+            Image.open(image_path).convert("RGB")
+            if os.path.exists(image_path)
+            else Image.open(BytesIO(base64.b64decode(image_path))).convert("RGB")
+        )
 
     def generate_stream_func(self, model, params, device):
         # get inputs
@@ -197,13 +196,11 @@ class ModelWorker:
         w, h = image.size
         boxes = [[R(box[0] / w), R(box[1] / h), R(box[2] / w), R(box[3] / h)] for box in boxes]
 
-        pred_dict = {
+        return {
             "boxes": boxes,
             "texts": [i[1] for i in result],
             "scores": [R(i[2]) for i in result],  # H,W
         }
-
-        return pred_dict
 
     def generate_gate(self, params):
         try:

@@ -124,7 +124,7 @@ class ModelWorker:
     def register_to_controller(self):
         logger.info("Register to controller")
 
-        url = self.controller_addr + "/register_worker"
+        url = f"{self.controller_addr}/register_worker"
         data = {
             "worker_name": self.worker_addr,
             "check_heart_beat": True,
@@ -141,7 +141,7 @@ class ModelWorker:
             f"worker_id: {worker_id}. "
         )
 
-        url = self.controller_addr + "/receive_heart_beat"
+        url = f"{self.controller_addr}/receive_heart_beat"
 
         while True:
             try:
@@ -213,7 +213,7 @@ class ModelWorker:
             text_threshold=text_threshold,
             device=device
         )
-        
+
         # add NMS to boxes
         boxes, logits, phrases = self.nms(boxes, logits, phrases)
         boxes = box_ops.box_cxcywh_to_xyxy(boxes)
@@ -228,14 +228,12 @@ class ModelWorker:
         logits = [round(x, 2) for x in logits]
 
         h, w, _ = image_np.shape
-        pred_dict = {
+        return {
             "boxes": boxes,
             "logits": logits,
             "phrases": phrases,
             "size": [h, w],  # H,W
         }
-
-        return pred_dict
 
     def nms(self, boxes, logits, phrases):
         iou_threshold = 0.8

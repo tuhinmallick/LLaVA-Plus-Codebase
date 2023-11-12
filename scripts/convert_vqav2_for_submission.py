@@ -24,7 +24,7 @@ if __name__ == '__main__':
 
     results = []
     error_line = 0
-    for line_idx, line in enumerate(open(src)):
+    for line in open(src):
         try:
             results.append(json.loads(line))
         except:
@@ -32,7 +32,7 @@ if __name__ == '__main__':
 
     results = {x['question_id']: x['text'] for x in results}
     test_split = [json.loads(line) for line in open(test_split)]
-    split_ids = set([x['question_id'] for x in test_split])
+    split_ids = {x['question_id'] for x in test_split}
 
     print(f'total results: {len(results)}, total split: {len(test_split)}, error_line: {error_line}')
 

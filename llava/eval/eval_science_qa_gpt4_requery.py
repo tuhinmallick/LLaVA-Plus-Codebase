@@ -54,13 +54,13 @@ if __name__ == "__main__":
 
     results = defaultdict(lambda: 0)
 
-    sqa_results = {}
-    sqa_results['acc'] = None
-    sqa_results['correct'] = None
-    sqa_results['count'] = None
-    sqa_results['results'] = {}
-    sqa_results['outputs'] = {}
-
+    sqa_results = {
+        'acc': None,
+        'correct': None,
+        'count': None,
+        'results': {},
+        'outputs': {},
+    }
     for prob_id, prob in split_problems.items():
         if prob_id not in our_predictions:
             assert False
@@ -76,23 +76,11 @@ if __name__ == "__main__":
 
         pattern = re.compile(r'The answer is ([A-Z]).')
         our_res = pattern.findall(our_pred)
-        if len(our_res) == 1:
-            our_answer = our_res[0]  # 'A', 'B', ...
-        else:
-            our_answer = "FAILED"
-
+        our_answer = our_res[0] if len(our_res) == 1 else "FAILED"
         requery_res = pattern.findall(requery_pred)
-        if len(requery_res) == 1:
-            requery_answer = requery_res[0]  # 'A', 'B', ...
-        else:
-            requery_answer = "FAILED"
-
+        requery_answer = requery_res[0] if len(requery_res) == 1 else "FAILED"
         gpt4_res = pattern.findall(gpt4_pred)
-        if len(gpt4_res) == 1:
-            gpt4_answer = gpt4_res[0]  # 'A', 'B', ...
-        else:
-            gpt4_answer = "FAILED"
-
+        gpt4_answer = gpt4_res[0] if len(gpt4_res) == 1 else "FAILED"
         our_pred_idx = get_pred_idx(our_answer, prob['choices'], args.options)
         gpt4_pred_idx = get_pred_idx(gpt4_answer, prob['choices'], args.options)
         requery_pred_idx = get_pred_idx(requery_answer, prob['choices'], args.options)

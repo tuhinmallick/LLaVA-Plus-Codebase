@@ -65,8 +65,9 @@ class CustomDataset(Dataset):
 def create_data_loader(questions, image_folder, tokenizer, image_processor, model_config, batch_size=1, num_workers=4):
     assert batch_size == 1, "batch_size must be 1"
     dataset = CustomDataset(questions, image_folder, tokenizer, image_processor, model_config)
-    data_loader = DataLoader(dataset, batch_size=batch_size, num_workers=num_workers, shuffle=False)
-    return data_loader
+    return DataLoader(
+        dataset, batch_size=batch_size, num_workers=num_workers, shuffle=False
+    )
 
 
 def eval_model(args):
@@ -80,47 +81,48 @@ def eval_model(args):
     questions = get_chunk(questions, args.num_chunks, args.chunk_idx)
     answers_file = os.path.expanduser(args.answers_file)
     os.makedirs(os.path.dirname(answers_file), exist_ok=True)
-    ans_file = open(answers_file, "w")
+    with open(answers_file, "w") as ans_file:
+        if 'plain' in model_name and 'finetune' not in model_name.lower() and 'mmtag' not in args.conv_mode:
+            args.conv_mode = f'{args.conv_mode}_mmtag'
+            print(f'It seems that this is a plain model, but it is not using a mmtag prompt, auto switching to {args.conv_mode}.')
 
-    if 'plain' in model_name and 'finetune' not in model_name.lower() and 'mmtag' not in args.conv_mode:
-        args.conv_mode = args.conv_mode + '_mmtag'
-        print(f'It seems that this is a plain model, but it is not using a mmtag prompt, auto switching to {args.conv_mode}.')
+        data_loader = create_data_loader(questions, args.image_folder, tokenizer, image_processor, model.config)
 
-    data_loader = create_data_loader(questions, args.image_folder, tokenizer, image_processor, model.config)
+        for (input_ids, image_tensor), line in tqdm(zip(data_loader, questions), total=len(questions)):
+            idx = line["question_id"]
+            cur_prompt = line["text"]
 
-    for (input_ids, image_tensor), line in tqdm(zip(data_loader, questions), total=len(questions)):
-        idx = line["question_id"]
-        cur_prompt = line["text"]
+            input_ids = input_ids.to(device='cuda', non_blocking=True)
 
-        input_ids = input_ids.to(device='cuda', non_blocking=True)
+            with torch.inference_mode():
+                output_ids = model.generate(
+                    input_ids,
+                    images=image_tensor.to(
+                        dtype=torch.float16, device='cuda', non_blocking=True
+                    ),
+                    do_sample=args.temperature > 0,
+                    temperature=args.temperature,
+                    top_p=args.top_p,
+                    num_beams=args.num_beams,
+                    max_new_tokens=args.max_new_tokens,
+                    use_cache=True,
+                )
 
-        with torch.inference_mode():
-            output_ids = model.generate(
-                input_ids,
-                images=image_tensor.to(dtype=torch.float16, device='cuda', non_blocking=True),
-                do_sample=True if args.temperature > 0 else False,
-                temperature=args.temperature,
-                top_p=args.top_p,
-                num_beams=args.num_beams,
-                max_new_tokens=args.max_new_tokens,
-                use_cache=True)
+            input_token_len = input_ids.shape[1]
+            n_diff_input_output = (input_ids != output_ids[:, :input_token_len]).sum().item()
+            if n_diff_input_output > 0:
+                print(f'[Warning] {n_diff_input_output} output_ids are not the same as the input_ids')
+            outputs = tokenizer.batch_decode(output_ids[:, input_token_len:], skip_special_tokens=True)[0]
+            outputs = outputs.strip()
 
-        input_token_len = input_ids.shape[1]
-        n_diff_input_output = (input_ids != output_ids[:, :input_token_len]).sum().item()
-        if n_diff_input_output > 0:
-            print(f'[Warning] {n_diff_input_output} output_ids are not the same as the input_ids')
-        outputs = tokenizer.batch_decode(output_ids[:, input_token_len:], skip_special_tokens=True)[0]
-        outputs = outputs.strip()
-
-        ans_id = shortuuid.uuid()
-        ans_file.write(json.dumps({"question_id": idx,
-                                   "prompt": cur_prompt,
-                                   "text": outputs,
-                                   "answer_id": ans_id,
-                                   "model_id": model_name,
-                                   "metadata": {}}) + "\n")
-        # ans_file.flush()
-    ans_file.close()
+            ans_id = shortuuid.uuid()
+            ans_file.write(json.dumps({"question_id": idx,
+                                       "prompt": cur_prompt,
+                                       "text": outputs,
+                                       "answer_id": ans_id,
+                                       "model_id": model_name,
+                                       "metadata": {}}) + "\n")
+                # ans_file.flush()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

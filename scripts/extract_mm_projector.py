@@ -16,8 +16,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Extract MMProjector weights')
     parser.add_argument('--model-path', type=str, help='model folder')
     parser.add_argument('--output', type=str, help='output file')
-    args = parser.parse_args()
-    return args
+    return parser.parse_args()
 
 
 if __name__ == '__main__':

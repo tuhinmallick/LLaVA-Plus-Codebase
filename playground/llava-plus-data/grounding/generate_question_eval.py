@@ -59,7 +59,7 @@ def ask_gpt(messages, max_retries=35, temperature=0.2, top_p=0.9, max_tokens=512
 
     openai_kwargs = get_openai_api()
 
-    for i in range(max_retries):
+    for _ in range(max_retries):
         try:
             response = openai.ChatCompletion.create(
                 **openai_kwargs,
@@ -79,7 +79,6 @@ def ask_gpt(messages, max_retries=35, temperature=0.2, top_p=0.9, max_tokens=512
                 return None
             print(type(e), e)
             time.sleep(2)
-            continue
 
 
 def R(x):
@@ -122,7 +121,7 @@ def get_worker_addr(controller_addr, model_name):
     # print(f"Models: {models}")
 
     ret = requests.post(
-        controller_addr + "/get_worker_address", json={"model": model_name}
+        f"{controller_addr}/get_worker_address", json={"model": model_name}
     )
     worker_addr = ret.json()["address"]
     del ret
@@ -153,7 +152,7 @@ The question should ask the AI to detect some objects in the image."""},
 
     # return
     return {
-        "unique_id": str(time.time()) + '_' + str(sample['id']),
+        "unique_id": f'{str(time.time())}_' + str(sample['id']),
         "image_id": sample['id'],
         "image_file_name": sample['file_name'],
         "image_path": os.path.join(image_dir, sample['file_name']),
@@ -183,7 +182,7 @@ def generate_data(
         if len(existing_examples) >= num_examples:
             print("Enough examples, skip generating.")
             return
-        print("Generating {} examples...".format(num_examples - len(existing_examples)))
+        print(f"Generating {num_examples - len(existing_examples)} examples...")
         num_examples = num_examples - len(existing_examples)
         seed = seed + len(existing_examples)
 
@@ -233,15 +232,14 @@ def generate_data(
             futures[executor.submit(generate_worker, captions_strs, objects_strs, examples, sample, image_dir)] = sample_idx
 
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
-        writer = open(output_file, 'a')
-        for future in tqdm(concurrent.futures.as_completed(futures), total=len(futures)):
-            result = future.result()
-            if result is None:
-                time.sleep(0.1)
-                continue
-            writer.write(json.dumps(result) + '\n')
-            writer.flush()
-        writer.close()
+        with open(output_file, 'a') as writer:
+            for future in tqdm(concurrent.futures.as_completed(futures), total=len(futures)):
+                result = future.result()
+                if result is None:
+                    time.sleep(0.1)
+                    continue
+                writer.write(json.dumps(result) + '\n')
+                writer.flush()
 
 
 def main(task, **kwargs):

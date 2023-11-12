@@ -68,6 +68,7 @@ def init_on_device(device: torch.device, include_buffers: bool=False):
         old_register_buffer(module, name, buffer)
         if buffer is not None:
             module._buffers[name] = module._buffers[name].to(device)
+
     if include_buffers:
         tensor_constructors_to_patch = {torch_function_name: getattr(torch, torch_function_name) for torch_function_name in ['empty', 'zeros', 'ones', 'full']}
     else:
@@ -79,11 +80,12 @@ def init_on_device(device: torch.device, include_buffers: bool=False):
             kwargs['device'] = device
             return fn(*args, **kwargs)
         return wrapper
+
     try:
         nn.Module.register_parameter = register_empty_parameter
         if include_buffers:
             nn.Module.register_buffer = register_empty_buffer
-        for torch_function_name in tensor_constructors_to_patch.keys():
+        for torch_function_name in tensor_constructors_to_patch:
             setattr(torch, torch_function_name, patch_tensor_constructor(getattr(torch, torch_function_name)))
         yield
     finally:

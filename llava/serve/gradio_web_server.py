@@ -31,14 +31,13 @@ priority = {
 
 def get_conv_log_filename():
     t = datetime.datetime.now()
-    name = os.path.join(LOGDIR, f"{t.year}-{t.month:02d}-{t.day:02d}-conv.json")
-    return name
+    return os.path.join(LOGDIR, f"{t.year}-{t.month:02d}-{t.day:02d}-conv.json")
 
 
 def get_model_list():
-    ret = requests.post(args.controller_url + "/refresh_all_workers")
+    ret = requests.post(f"{args.controller_url}/refresh_all_workers")
     assert ret.status_code == 200
-    ret = requests.post(args.controller_url + "/list_models")
+    ret = requests.post(f"{args.controller_url}/list_models")
     models = ret.json()["models"]
     models.sort(key=lambda x: priority.get(x, x))
     logger.info(f"Models: {models}")
@@ -132,8 +131,7 @@ def add_text(state, text, image, image_process_mode, request: gr.Request):
         state.skip_next = True
         return (state, state.to_gradio_chatbot(), "", None) + (no_change_btn,) * 5
     if args.moderate:
-        flagged = violates_moderation(text)
-        if flagged:
+        if flagged := violates_moderation(text):
             state.skip_next = True
             return (state, state.to_gradio_chatbot(), moderation_msg, None) + (
                 no_change_btn,) * 5
@@ -177,13 +175,12 @@ def http_bot(state, model_selector, temperature, top_p, max_new_tokens, request:
                     template_name = "llava_v1"
             elif "mpt" in model_name.lower():
                 template_name = "mpt"
+            elif 'mmtag' in model_name.lower():
+                template_name = "v0_mmtag"
+            elif 'plain' in model_name.lower() and 'finetune' not in model_name.lower():
+                template_name = "v0_mmtag"
             else:
-                if 'mmtag' in model_name.lower():
-                    template_name = "v0_mmtag"
-                elif 'plain' in model_name.lower() and 'finetune' not in model_name.lower():
-                    template_name = "v0_mmtag"
-                else:
-                    template_name = "llava_v0"
+                template_name = "llava_v0"
         elif "mpt" in model_name:
             template_name = "mpt_text"
         elif "llama-2" in model_name:
@@ -197,8 +194,9 @@ def http_bot(state, model_selector, temperature, top_p, max_new_tokens, request:
 
     # Query worker address
     controller_url = args.controller_url
-    ret = requests.post(controller_url + "/get_worker_address",
-            json={"model": model_name})
+    ret = requests.post(
+        f"{controller_url}/get_worker_address", json={"model": model_name}
+    )
     worker_addr = ret.json()["address"]
     logger.info(f"model_name: {model_name}, worker_addr: {worker_addr}")
 
@@ -239,14 +237,19 @@ def http_bot(state, model_selector, temperature, top_p, max_new_tokens, request:
 
     try:
         # Stream output
-        response = requests.post(worker_addr + "/worker_generate_stream",
-            headers=headers, json=pload, stream=True, timeout=10)
+        response = requests.post(
+            f"{worker_addr}/worker_generate_stream",
+            headers=headers,
+            json=pload,
+            stream=True,
+            timeout=10,
+        )
         for chunk in response.iter_lines(decode_unicode=False, delimiter=b"\0"):
             if chunk:
                 data = json.loads(chunk.decode())
                 if data["error_code"] == 0:
                     output = data["text"][len(prompt):].strip()
-                    state.messages[-1][-1] = output + "▌"
+                    state.messages[-1][-1] = f"{output}▌"
                     yield (state, state.to_gradio_chatbot()) + (disable_btn,) * 5
                 else:
                     output = data["text"] + f" (error_code: {data['error_code']})"
