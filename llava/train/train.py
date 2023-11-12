@@ -202,13 +202,13 @@ def safe_save_model_for_hf_trainer(trainer: transformers.Trainer,
 
         current_folder = output_dir.split('/')[-1]
         parent_folder = os.path.dirname(output_dir)
-        if trainer.args.local_rank == 0 or trainer.args.local_rank == -1:
+        if trainer.args.local_rank in [0, -1]:
             if current_folder.startswith('checkpoint-'):
                 mm_projector_folder = os.path.join(parent_folder, "mm_projector")
                 os.makedirs(mm_projector_folder, exist_ok=True)
                 torch.save(weight_to_save, os.path.join(mm_projector_folder, f'{current_folder}.bin'))
             else:
-                torch.save(weight_to_save, os.path.join(output_dir, f'mm_projector.bin'))
+                torch.save(weight_to_save, os.path.join(output_dir, 'mm_projector.bin'))
         return
 
     if trainer.deepspeed:
@@ -325,7 +325,10 @@ def preprocess_multimodal(
                 sentence['value'] = DEFAULT_IMAGE_TOKEN + '\n' + sentence['value']
                 sentence['value'] = sentence['value'].strip()
                 if "mmtag" in conversation_lib.default_conversation.version:
-                    sentence['value'] = sentence['value'].replace(DEFAULT_IMAGE_TOKEN, '<Image>' + DEFAULT_IMAGE_TOKEN + '</Image>')
+                    sentence['value'] = sentence['value'].replace(
+                        DEFAULT_IMAGE_TOKEN,
+                        f'<Image>{DEFAULT_IMAGE_TOKEN}</Image>',
+                    )
             replace_token = DEFAULT_IMAGE_TOKEN
             if data_args.mm_use_im_start_end:
                 replace_token = DEFAULT_IM_START_TOKEN + replace_token + DEFAULT_IM_END_TOKEN
@@ -531,8 +534,10 @@ def preprocess_mpt(
 
         rounds = conversation.split(conv.sep)
         re_rounds = [conv.sep.join(rounds[:3])] # system + user + gpt
-        for conv_idx in range(3, len(rounds), 2):
-            re_rounds.append(conv.sep.join(rounds[conv_idx:conv_idx+2]))    # user + gpt
+        re_rounds.extend(
+            conv.sep.join(rounds[conv_idx : conv_idx + 2])
+            for conv_idx in range(3, len(rounds), 2)
+        )
         cur_len = 0
         target[:cur_len] = IGNORE_INDEX
         for i, rou in enumerate(re_rounds):
@@ -679,14 +684,14 @@ class LazySupervisedDataset(Dataset):
         # **Warning**: if multiple folders has the same image name, the first one will be used, which may not be the desired one!
         if ',' not in image_folder:
             return Image.open(os.path.join(image_folder, image_file)).convert('RGB')
-        
+
         dir_list = image_folder.split(',')
         for dirname in dir_list:
             img_path = os.path.join(dirname.strip(), image_file)
             if os.path.exists(img_path):
                 return Image.open(img_path).convert('RGB')
 
-        raise ValueError("Unknow_file: {}".format(image_file))
+        raise ValueError(f"Unknow_file: {image_file}")
 
     def __getitem__(self, i) -> Dict[str, torch.Tensor]:
         sources = self.list_data_dict[i]
@@ -774,10 +779,9 @@ class DataCollatorForSupervisedDataset(object):
 
 
 def build_dataset(data_args, tokenizer, dataset_cls):
-    train_dataset = dataset_cls(tokenizer=tokenizer,
-                                data_path=data_args.data_path,
-                                data_args=data_args)
-    return train_dataset
+    return dataset_cls(
+        tokenizer=tokenizer, data_path=data_args.data_path, data_args=data_args
+    )
 
 
 def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer,
@@ -925,7 +929,7 @@ def train():
             model_args=model_args,
             fsdp=training_args.fsdp
         )
-        
+
         vision_tower = model.get_vision_tower()
         vision_tower.to(dtype=torch.bfloat16 if training_args.bf16 else torch.float16, device=training_args.device)
 
@@ -991,7 +995,7 @@ def train():
         non_lora_state_dict = get_peft_state_non_lora_maybe_zero_3(
             model.named_parameters()
         )
-        if training_args.local_rank == 0 or training_args.local_rank == -1:
+        if training_args.local_rank in [0, -1]:
             model.config.save_pretrained(training_args.output_dir)
             model.save_pretrained(training_args.output_dir, state_dict=state_dict)
             torch.save(non_lora_state_dict, os.path.join(training_args.output_dir, 'non_lora_trainables.bin'))

@@ -73,24 +73,22 @@ def prepare_image(image_pth):
     """
     apply transformation to the image. crop the image ot 640 short edge by default
     """
-    if os.path.exists(image_pth):
-        image = Image.open(image_pth).convert('RGB')
-    else:
-        image = Image.open(BytesIO(base64.b64decode(image_pth))).convert("RGB")
-
-    return image
+    return (
+        Image.open(image_pth).convert('RGB')
+        if os.path.exists(image_pth)
+        else Image.open(BytesIO(base64.b64decode(image_pth))).convert("RGB")
+    )
 
 
 def prepare_mask(image_pth):
     """
     apply transformation to the image. crop the image ot 640 short edge by default
     """
-    if os.path.exists(image_pth):
-        image = Image.open(image_pth).convert('RGBA')
-    else:
-        image = Image.open(BytesIO(base64.b64decode(image_pth))).convert("RGBA")
-
-    return image
+    return (
+        Image.open(image_pth).convert('RGBA')
+        if os.path.exists(image_pth)
+        else Image.open(BytesIO(base64.b64decode(image_pth))).convert("RGBA")
+    )
 
 class ModelWorker:
     def __init__(
@@ -132,14 +130,16 @@ class ModelWorker:
         if 'focalt' in conf_files:
             pretrained_pth = os.path.join("seem_focalt_v0.pt")
             if not os.path.exists(pretrained_pth):
-                os.system("wget {}".format(
-                    "https://huggingface.co/xdecoder/SEEM/resolve/main/seem_focalt_v0.pt"))
+                os.system(
+                    'wget https://huggingface.co/xdecoder/SEEM/resolve/main/seem_focalt_v0.pt'
+                )
             cur_model = 'Focal-T'
         elif 'focal' in conf_files:
             pretrained_pth = os.path.join("seem_focall_v0.pt")
             if not os.path.exists(pretrained_pth):
-                os.system("wget {}".format(
-                    "https://huggingface.co/xdecoder/SEEM/resolve/main/seem_focall_v0.pt"))
+                os.system(
+                    'wget https://huggingface.co/xdecoder/SEEM/resolve/main/seem_focall_v0.pt'
+                )
             cur_model = 'Focal-L'
 
         '''
@@ -155,7 +155,7 @@ class ModelWorker:
     def register_to_controller(self):
         logger.info("Register to controller")
 
-        url = self.controller_addr + "/register_worker"
+        url = f"{self.controller_addr}/register_worker"
         data = {
             "worker_name": self.worker_addr,
             "check_heart_beat": True,
@@ -172,7 +172,7 @@ class ModelWorker:
             f"worker_id: {worker_id}. "
         )
 
-        url = self.controller_addr + "/receive_heart_beat"
+        url = f"{self.controller_addr}/receive_heart_beat"
 
         while True:
             try:
@@ -219,35 +219,31 @@ class ModelWorker:
         
         image_path = params["image"]
         pil_image = prepare_image(image_path)
-        
+
         refimg_path = params["refimg"]
         pil_refimg = prepare_image(refimg_path)
-        
+
         refmask_path = params["refmask"]
         pil_refmask = prepare_mask(refmask_path)
-        
+
         image_input = {
             'image': pil_image,
             "mask": None,
         }
-        
+
         refimg_input = {
             'image': pil_refimg,
             "mask": pil_refmask,
         }
-        
+
         res_img = interactive_infer_image(self.model, None, image_input, 'Example', refimg=refimg_input)[0]
-        
+
         # to b64        
         buffered = BytesIO()
         res_img.save(buffered, format="JPEG")
         img_b64_str = base64.b64encode(buffered.getvalue()).decode()
-        
-        pred_dict = {
-            "edited_image": img_b64_str
-        }
 
-        return pred_dict
+        return {"edited_image": img_b64_str}
 
     def generate_gate(self, params):
         # ret = {"text": "", "error_code": 0}

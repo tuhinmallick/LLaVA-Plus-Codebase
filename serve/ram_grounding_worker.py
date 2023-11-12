@@ -114,28 +114,24 @@ class ModelWorker:
 
 
     def get_sub_worker_addr(self, worker_name):
-        # get grounding dino addr
         if worker_name.startswith("http"):
-            sub_server_addr = worker_name
-        else:
-            controller_addr = self.controller_addr
-            ret = requests.post(controller_addr + "/refresh_all_workers")
-            ret = requests.post(controller_addr + "/list_models")
-            models = ret.json()["models"]
-            models.sort()
-            print(f"Models: {models}")
+            return worker_name
+        controller_addr = self.controller_addr
+        ret = requests.post(f"{controller_addr}/refresh_all_workers")
+        ret = requests.post(f"{controller_addr}/list_models")
+        models = ret.json()["models"]
+        models.sort()
+        print(f"Models: {models}")
 
-            ret = requests.post(
-                controller_addr + "/get_worker_address", json={"model": worker_name}
-            )
-            sub_server_addr = ret.json()["address"]
-        # print(f"worker_name: {worker_name}")
-        return sub_server_addr
+        ret = requests.post(
+            f"{controller_addr}/get_worker_address", json={"model": worker_name}
+        )
+        return ret.json()["address"]
 
     def register_to_controller(self):
         logger.info("Register to controller")
 
-        url = self.controller_addr + "/register_worker"
+        url = f"{self.controller_addr}/register_worker"
         data = {
             "worker_name": self.worker_addr,
             "check_heart_beat": True,
@@ -152,7 +148,7 @@ class ModelWorker:
             f"worker_id: {worker_id}. "
         )
 
-        url = self.controller_addr + "/receive_heart_beat"
+        url = f"{self.controller_addr}/receive_heart_beat"
 
         while True:
             try:
@@ -211,14 +207,12 @@ class ModelWorker:
         # get inputs
 
 
-    
+
         headers = {"User-Agent": "G-SAM Client"}
 
         # ram
         pred_dict_ram = requests.post(
-            self.ram_server_addr + "/worker_generate",
-            headers=headers,
-            json=params,
+            f"{self.ram_server_addr}/worker_generate", headers=headers, json=params
         ).json()
 
         params.update({
@@ -227,7 +221,7 @@ class ModelWorker:
 
         # gdino
         pred_dict_gdino = requests.post(
-            self.grounding_dino_server_addr + "/worker_generate",
+            f"{self.grounding_dino_server_addr}/worker_generate",
             headers=headers,
             json=params,
         ).json()

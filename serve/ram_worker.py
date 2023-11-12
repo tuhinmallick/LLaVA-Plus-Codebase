@@ -113,7 +113,7 @@ class ModelWorker:
     def register_to_controller(self):
         logger.info("Register to controller")
 
-        url = self.controller_addr + "/register_worker"
+        url = f"{self.controller_addr}/register_worker"
         data = {
             "worker_name": self.worker_addr,
             "check_heart_beat": True,
@@ -130,7 +130,7 @@ class ModelWorker:
             f"worker_id: {worker_id}. "
         )
 
-        url = self.controller_addr + "/receive_heart_beat"
+        url = f"{self.controller_addr}/receive_heart_beat"
 
         while True:
             try:
@@ -204,13 +204,11 @@ class ModelWorker:
         tags_chinese=res[1].replace(' |', ',')
 
         _, __, h, w = image.shape
-        pred_dict = {
+        return {
             "tags": tags,
             "tags_chinese": tags_chinese,
             "size": [h, w],  # H,W
         }
-
-        return pred_dict
 
     def generate_gate(self, params):
         try:
@@ -240,8 +238,6 @@ class ModelWorker:
             is_llama = "llama" in str(
                 type(self.model)
             )  # vicuna support batch inference
-            is_chatglm = "chatglm" in str(type(self.model))
-            is_t5 = "t5" in str(type(self.model))
             if is_llama:
                 encoding = tokenizer.batch_encode_plus(
                     params["input"], padding=True, return_tensors="pt"
@@ -265,6 +261,8 @@ class ModelWorker:
             else:
                 embedding = []
                 token_num = 0
+                is_chatglm = "chatglm" in str(type(self.model))
+                is_t5 = "t5" in str(type(self.model))
                 for text in params["input"]:
                     input_ids = tokenizer.encode(text, return_tensors="pt").to(
                         self.device

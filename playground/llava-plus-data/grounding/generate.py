@@ -47,7 +47,7 @@ def ask_gpt(messages, max_retries=35, temperature=0.2, top_p=0.9, max_tokens=512
 
     openai_kwargs = get_openai_api()
 
-    for i in range(max_retries):
+    for _ in range(max_retries):
         try:
             response = openai.ChatCompletion.create(
                 **openai_kwargs,
@@ -67,7 +67,6 @@ def ask_gpt(messages, max_retries=35, temperature=0.2, top_p=0.9, max_tokens=512
                 return None
             print(type(e), e)
             time.sleep(2)
-            continue
 
 
 def R(x):
@@ -110,7 +109,7 @@ def get_worker_addr(controller_addr, model_name):
     # print(f"Models: {models}")
 
     ret = requests.post(
-        controller_addr + "/get_worker_address", json={"model": model_name}
+        f"{controller_addr}/get_worker_address", json={"model": model_name}
     )
     worker_addr = ret.json()["address"]
     del ret
@@ -158,7 +157,7 @@ You will be given a question about detecting something in an image. Please extra
 
     # 3. grounding dino input -> grounding dino output
     # get grounding dino output
-    
+
     worker_addr = get_worker_addr(controller_address, model_name)
     headers = {"User-Agent": "GSAM Client"}
     # img_path = os.path.join(args.image_dir, image['image_id'])
@@ -166,15 +165,15 @@ You will be given a question about detecting something in an image. Please extra
     img = load_image(img_path)
     img_arg = encode(img)
     ret = requests.post(
-            worker_addr + "/worker_generate",
-            json={
-                "image": img_arg,
-                "caption": grounding_dino_input,
-                "box_threshold": 0.3,
-                "text_threshold": 0.25,
-            },
-            headers=headers,
-        ).json()
+        f"{worker_addr}/worker_generate",
+        json={
+            "image": img_arg,
+            "caption": grounding_dino_input,
+            "box_threshold": 0.3,
+            "text_threshold": 0.25,
+        },
+        headers=headers,
+    ).json()
     if os.getenv('DEBUG_PRINT'):
         print(ret)
     ret.pop("size")
@@ -202,7 +201,7 @@ Do not reveal the input information of the image. DO NOT say that you are given 
 
     # return
     return {
-        "unique_id": str(time.time()) + '_' + str(sample['id']),
+        "unique_id": f'{str(time.time())}_' + str(sample['id']),
         "image_id": sample['id'],
         "image_file_name": sample['file_name'],
         "image_path": os.path.join(image_dir, sample['file_name']),
@@ -238,7 +237,7 @@ def generate_data(
         if len(existing_examples) >= num_examples:
             print("Enough examples, skip generating.")
             return
-        print("Generating {} examples...".format(num_examples - len(existing_examples)))
+        print(f"Generating {num_examples - len(existing_examples)} examples...")
         num_examples = num_examples - len(existing_examples)
         seed = seed + len(existing_examples)
 
@@ -260,11 +259,13 @@ def generate_data(
             Warning("seed is not 20520, set seed to 20520!")
         with open(reference_json) as f:
             reference_examples = json.load(f)
-        print("Loaded reference json, {} examples".format(len(reference_examples)))
-        reference_ids = list(set([int(item['id']) for item in reference_examples]))
+        print(f"Loaded reference json, {len(reference_examples)} examples")
+        reference_ids = list({int(item['id']) for item in reference_examples})
         coco_images = [item for item in coco_images if int(item['id']) in reference_ids]
-        print("Filtered coco images with reference json, {} -> {}".format(len(reference_ids), len(coco_images)))
-        # import ipdb; ipdb.set_trace()
+        print(
+            f"Filtered coco images with reference json, {len(reference_ids)} -> {len(coco_images)}"
+        )
+            # import ipdb; ipdb.set_trace()
 
 
     # random select 1000 images
@@ -303,15 +304,14 @@ def generate_data(
             futures[executor.submit(generate_worker, captions_strs, objects_strs, examples, sample, image_dir)] = sample_idx
 
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
-        writer = open(output_file, 'a')
-        for future in tqdm(concurrent.futures.as_completed(futures), total=len(futures)):
-            result = future.result()
-            if result is None:
-                time.sleep(0.1)
-                continue
-            writer.write(json.dumps(result) + '\n')
-            writer.flush()
-        writer.close()
+        with open(output_file, 'a') as writer:
+            for future in tqdm(concurrent.futures.as_completed(futures), total=len(futures)):
+                result = future.result()
+                if result is None:
+                    time.sleep(0.1)
+                    continue
+                writer.write(json.dumps(result) + '\n')
+                writer.flush()
 
 
 

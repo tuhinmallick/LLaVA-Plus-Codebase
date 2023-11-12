@@ -32,10 +32,7 @@ def make_delta(base_model_path, target_model_path, delta_path, hub_repo_id):
             param.data[:bparam.shape[0], :bparam.shape[1]] -= bparam
 
     print("Saving delta")
-    if hub_repo_id:
-        kwargs = {"push_to_hub": True, "repo_id": hub_repo_id}
-    else:
-        kwargs = {}
+    kwargs = {"push_to_hub": True, "repo_id": hub_repo_id} if hub_repo_id else {}
     target.save_pretrained(delta_path, **kwargs)
     target_tokenizer = AutoTokenizer.from_pretrained(target_model_path)
     target_tokenizer.save_pretrained(delta_path, **kwargs)

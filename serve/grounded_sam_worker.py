@@ -105,33 +105,25 @@ class ModelWorker:
 
         if grounding_dino_server is None:
             raise NotImplementedError("grounding_dino_server is None, we only support grounding_dino_server now.")
-            logger.info(f"Loading the model {self.model_names} on worker {worker_id} ...")
-            self.model = load_model(
-                model_config_path=model_config,
-                model_checkpoint_path=model_path,
-                device=device,
-            )
-            self.model.to(device)
-            self.model.eval()
-        else:
-            self.model = None
+        self.model = None
             # get grounding dino addr
-            if grounding_dino_server.startswith("http"):
-                grounding_dino_server_addr = grounding_dino_server
-            else:
-                controller_addr = self.controller_addr
-                ret = requests.post(controller_addr + "/refresh_all_workers")
-                ret = requests.post(controller_addr + "/list_models")
-                models = ret.json()["models"]
-                models.sort()
-                print(f"Models: {models}")
+        if grounding_dino_server.startswith("http"):
+            grounding_dino_server_addr = grounding_dino_server
+        else:
+            controller_addr = self.controller_addr
+            ret = requests.post(f"{controller_addr}/refresh_all_workers")
+            ret = requests.post(f"{controller_addr}/list_models")
+            models = ret.json()["models"]
+            models.sort()
+            print(f"Models: {models}")
 
-                ret = requests.post(
-                    controller_addr + "/get_worker_address", json={"model": grounding_dino_server}
-                )
-                grounding_dino_server_addr = ret.json()["address"]
-            print(f"grounding_dino_server_addr: {grounding_dino_server_addr}")
-            self.grounding_dino_server_addr = grounding_dino_server_addr
+            ret = requests.post(
+                f"{controller_addr}/get_worker_address",
+                json={"model": grounding_dino_server},
+            )
+            grounding_dino_server_addr = ret.json()["address"]
+        print(f"grounding_dino_server_addr: {grounding_dino_server_addr}")
+        self.grounding_dino_server_addr = grounding_dino_server_addr
 
 
         if not no_register:
@@ -165,14 +157,15 @@ class ModelWorker:
             else:
                 time.sleep(3)
                 controller_addr = self.controller_addr
-                ret = requests.post(controller_addr + "/refresh_all_workers")
-                ret = requests.post(controller_addr + "/list_models")
+                ret = requests.post(f"{controller_addr}/refresh_all_workers")
+                ret = requests.post(f"{controller_addr}/list_models")
                 models = ret.json()["models"]
                 models.sort()
                 print(f"Models: {models}")
 
                 ret = requests.post(
-                    controller_addr + "/get_worker_address", json={"model": sam_server}
+                    f"{controller_addr}/get_worker_address",
+                    json={"model": sam_server},
                 )
                 sam_server_addr = ret.json()["address"]
             print(f"sam_server_addr: {sam_server_addr}")
@@ -183,7 +176,7 @@ class ModelWorker:
     def register_to_controller(self):
         logger.info("Register to controller")
 
-        url = self.controller_addr + "/register_worker"
+        url = f"{self.controller_addr}/register_worker"
         data = {
             "worker_name": self.worker_addr,
             "check_heart_beat": True,
@@ -200,7 +193,7 @@ class ModelWorker:
             f"worker_id: {worker_id}. "
         )
 
-        url = self.controller_addr + "/receive_heart_beat"
+        url = f"{self.controller_addr}/receive_heart_beat"
 
         while True:
             try:
@@ -266,7 +259,7 @@ class ModelWorker:
         if self.grounding_dino_server is not None:
             headers = {"User-Agent": "G-SAM Client"}
             pred_dict = requests.post(
-                self.grounding_dino_server_addr + "/worker_generate",
+                f"{self.grounding_dino_server_addr}/worker_generate",
                 headers=headers,
                 json=params,
             ).json()
@@ -324,14 +317,14 @@ class ModelWorker:
                 headers = {"User-Agent": "G-SAM Client"}
                 params['boxes'] = boxes
                 pred_dict_sam = requests.post(
-                    self.sam_server_addr + "/worker_generate",
+                    f"{self.sam_server_addr}/worker_generate",
                     headers=headers,
                     json=params,
                 ).json()
                 maskrls_list = pred_dict_sam['masks_rle']
         else:
             maskrls_list = []
-        
+
 
         pred_dict['masks_rle'] = maskrls_list
         return pred_dict

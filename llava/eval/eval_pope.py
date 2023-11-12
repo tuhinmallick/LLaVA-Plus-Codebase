@@ -20,11 +20,7 @@ def eval_pope(answers, label_file):
             answer['text'] = 'yes'
 
     for i in range(len(label_list)):
-        if label_list[i] == 'no':
-            label_list[i] = 0
-        else:
-            label_list[i] = 1
-
+        label_list[i] = 0 if label_list[i] == 'no' else 1
     pred_list = []
     for answer in answers:
         if answer['text'] == 'no':
@@ -48,17 +44,17 @@ def eval_pope(answers, label_file):
             FN += 1
 
     print('TP\tFP\tTN\tFN\t')
-    print('{}\t{}\t{}\t{}'.format(TP, FP, TN, FN))
+    print(f'{TP}\t{FP}\t{TN}\t{FN}')
 
     precision = float(TP) / float(TP + FP)
     recall = float(TP) / float(TP + FN)
     f1 = 2*precision*recall / (precision + recall)
     acc = (TP + TN) / (TP + TN + FP + FN)
-    print('Accuracy: {}'.format(acc))
-    print('Precision: {}'.format(precision))
-    print('Recall: {}'.format(recall))
-    print('F1 score: {}'.format(f1))
-    print('Yes ratio: {}'.format(yes_ratio))
+    print(f'Accuracy: {acc}')
+    print(f'Precision: {precision}')
+    print(f'Recall: {recall}')
+    print(f'F1 score: {f1}')
+    print(f'Yes ratio: {yes_ratio}')
     print('%.3f, %.3f, %.3f, %.3f, %.3f' % (f1, acc, precision, recall, yes_ratio) )
 
 if __name__ == "__main__":
@@ -76,6 +72,6 @@ if __name__ == "__main__":
         assert file.endswith('.json')
         category = file[10:-5]
         cur_answers = [x for x in answers if questions[x['question_id']]['category'] == category]
-        print('Category: {}, # samples: {}'.format(category, len(cur_answers)))
+        print(f'Category: {category}, # samples: {len(cur_answers)}')
         eval_pope(cur_answers, os.path.join(args.annotation_dir, file))
         print("====================================")

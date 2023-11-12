@@ -59,10 +59,10 @@ def _fwd_kernel(Q, K, V, Bias, Out, Lse, TMP, softmax_scale, stride_qb, stride_q
     q_ptrs = Q + off_b * stride_qb + off_h * stride_qh + (offs_m[:, None] * stride_qm + offs_d[None, :])
     k_ptrs = K + off_b * stride_kb + off_h * stride_kh + (offs_n[:, None] * stride_kn + offs_d[None, :])
     v_ptrs = V + off_b * stride_vb + off_h * stride_vh + (offs_n[:, None] * stride_vn + offs_d[None, :])
-    if BIAS_TYPE == 'vector':
-        b_ptrs = Bias + off_b * stride_bb + off_h * stride_bh + offs_n
-    elif BIAS_TYPE == 'matrix':
+    if BIAS_TYPE == 'matrix':
         b_ptrs = Bias + off_b * stride_bb + off_h * stride_bh + (offs_m[:, None] * stride_bm + offs_n[None, :])
+    elif BIAS_TYPE == 'vector':
+        b_ptrs = Bias + off_b * stride_bb + off_h * stride_bh + offs_n
     t_ptrs = TMP + off_hb * seqlen_q_rounded + offs_m
     lse_i = tl.zeros([BLOCK_M], dtype=tl.float32) - float('inf')
     m_i = tl.zeros([BLOCK_M], dtype=tl.float32) - float('inf')

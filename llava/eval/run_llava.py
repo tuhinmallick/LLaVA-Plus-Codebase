@@ -27,17 +27,16 @@ import re
 
 
 def image_parser(args):
-    out = args.image_file.split(args.sep)
-    return out
+    return args.image_file.split(args.sep)
 
 
 def load_image(image_file):
-    if image_file.startswith("http") or image_file.startswith("https"):
-        response = requests.get(image_file)
-        image = Image.open(BytesIO(response.content)).convert("RGB")
-    else:
-        image = Image.open(image_file).convert("RGB")
-    return image
+    if not image_file.startswith("http") and not image_file.startswith(
+        "https"
+    ):
+        return Image.open(image_file).convert("RGB")
+    response = requests.get(image_file)
+    return Image.open(BytesIO(response.content)).convert("RGB")
 
 
 def load_images(image_files):
@@ -60,15 +59,15 @@ def eval_model(args):
     qs = args.query
     image_token_se = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN
     if IMAGE_PLACEHOLDER in qs:
-        if model.config.mm_use_im_start_end:
-            qs = re.sub(IMAGE_PLACEHOLDER, image_token_se, qs)
-        else:
-            qs = re.sub(IMAGE_PLACEHOLDER, DEFAULT_IMAGE_TOKEN, qs)
+        qs = (
+            re.sub(IMAGE_PLACEHOLDER, image_token_se, qs)
+            if model.config.mm_use_im_start_end
+            else re.sub(IMAGE_PLACEHOLDER, DEFAULT_IMAGE_TOKEN, qs)
+        )
+    elif model.config.mm_use_im_start_end:
+        qs = image_token_se + "\n" + qs
     else:
-        if model.config.mm_use_im_start_end:
-            qs = image_token_se + "\n" + qs
-        else:
-            qs = DEFAULT_IMAGE_TOKEN + "\n" + qs
+        qs = DEFAULT_IMAGE_TOKEN + "\n" + qs
 
     if "llama-2" in model_name.lower():
         conv_mode = "llava_llama_2"
@@ -81,9 +80,7 @@ def eval_model(args):
 
     if args.conv_mode is not None and conv_mode != args.conv_mode:
         print(
-            "[WARNING] the auto inferred conversation mode is {}, while `--conv-mode` is {}, using {}".format(
-                conv_mode, args.conv_mode, args.conv_mode
-            )
+            f"[WARNING] the auto inferred conversation mode is {conv_mode}, while `--conv-mode` is {args.conv_mode}, using {args.conv_mode}"
         )
     else:
         args.conv_mode = conv_mode
@@ -115,7 +112,7 @@ def eval_model(args):
         output_ids = model.generate(
             input_ids,
             images=images_tensor,
-            do_sample=True if args.temperature > 0 else False,
+            do_sample=args.temperature > 0,
             temperature=args.temperature,
             top_p=args.top_p,
             num_beams=args.num_beams,

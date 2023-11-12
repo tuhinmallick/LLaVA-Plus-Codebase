@@ -107,7 +107,7 @@ class ModelWorker:
     def register_to_controller(self):
         logger.info("Register to controller")
 
-        url = self.controller_addr + "/register_worker"
+        url = f"{self.controller_addr}/register_worker"
         data = {
             "worker_name": self.worker_addr,
             "check_heart_beat": True,
@@ -124,7 +124,7 @@ class ModelWorker:
             f"worker_id: {worker_id}. "
         )
 
-        url = self.controller_addr + "/receive_heart_beat"
+        url = f"{self.controller_addr}/receive_heart_beat"
 
         while True:
             try:
@@ -168,14 +168,11 @@ class ModelWorker:
 
     def load_image(self, image_path: str) -> Tuple[np.array, torch.Tensor]:
 
-        if os.path.exists(image_path):
-            image_source = Image.open(image_path).convert("RGB")
-        else:
-            # base64 coding
-            image_source = Image.open(
-                BytesIO(base64.b64decode(image_path))).convert("RGB")
-
-        return image_source
+        return (
+            Image.open(image_path).convert("RGB")
+            if os.path.exists(image_path)
+            else Image.open(BytesIO(base64.b64decode(image_path))).convert("RGB")
+        )
 
     def generate_stream_func(self, model, params, device):
         # get inputs
@@ -192,12 +189,10 @@ class ModelWorker:
             generated_ids, skip_special_tokens=True)[0].strip()
 
         w, h = image.size
-        pred_dict = {
+        return {
             "caption": generated_text,
             "size": [h, w],  # H,W
         }
-
-        return pred_dict
 
     def generate_gate(self, params):
         try:
@@ -227,8 +222,6 @@ class ModelWorker:
             is_llama = "llama" in str(
                 type(self.model)
             )  # vicuna support batch inference
-            is_chatglm = "chatglm" in str(type(self.model))
-            is_t5 = "t5" in str(type(self.model))
             if is_llama:
                 encoding = tokenizer.batch_encode_plus(
                     params["input"], padding=True, return_tensors="pt"
@@ -252,6 +245,8 @@ class ModelWorker:
             else:
                 embedding = []
                 token_num = 0
+                is_chatglm = "chatglm" in str(type(self.model))
+                is_t5 = "t5" in str(type(self.model))
                 for text in params["input"]:
                     input_ids = tokenizer.encode(text, return_tensors="pt").to(
                         self.device

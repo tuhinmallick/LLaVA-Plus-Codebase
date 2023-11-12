@@ -33,7 +33,6 @@ def get_pred_idx(prediction, choices, options):
         return options.index(prediction)
     else:
         return -1
-        return random.choice(range(len(choices)))
 
 
 if __name__ == "__main__":
@@ -47,13 +46,13 @@ if __name__ == "__main__":
     split_problems = {idx: problems[idx] for idx in split_indices}
 
     results = {'correct': [], 'incorrect': []}
-    sqa_results = {}
-    sqa_results['acc'] = None
-    sqa_results['correct'] = None
-    sqa_results['count'] = None
-    sqa_results['results'] = {}
-    sqa_results['outputs'] = {}
-
+    sqa_results = {
+        'acc': None,
+        'correct': None,
+        'count': None,
+        'results': {},
+        'outputs': {},
+    }
     for prob_id, prob in split_problems.items():
         if prob_id not in predictions:
             pred = {'text': 'FAILED', 'prompt': 'Unknown'}
@@ -69,11 +68,7 @@ if __name__ == "__main__":
         else:
             pattern = re.compile(r'The answer is ([A-Z]).')
             res = pattern.findall(pred_text)
-            if len(res) == 1:
-                answer = res[0]  # 'A', 'B', ...
-            else:
-                answer = "FAILED"
-
+            answer = res[0] if len(res) == 1 else "FAILED"
         pred_idx = get_pred_idx(answer, prob['choices'], args.options)
 
         analysis = {

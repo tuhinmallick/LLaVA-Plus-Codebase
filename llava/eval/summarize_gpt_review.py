@@ -31,10 +31,7 @@ if __name__ == '__main__':
         config = os.path.basename(review_file).replace('gpt4_text_', '').replace('.jsonl', '')
         if args.select is not None and any(x not in config for x in args.select):
             continue
-        if '0613' in config:
-            version = '0613'
-        else:
-            version = '0314'
+        version = '0613' if '0613' in config else '0314'
         if args.version is not None and args.version != version:
             continue
         scores = defaultdict(list)
@@ -47,11 +44,10 @@ if __name__ == '__main__':
                 if 'category' in review:
                     scores[review['category']].append(review['tuple'])
                     scores['all'].append(review['tuple'])
+                elif 'tuple' in review:
+                    scores['all'].append(review['tuple'])
                 else:
-                    if 'tuple' in review:
-                        scores['all'].append(review['tuple'])
-                    else:
-                        scores['all'].append(review['score'])
+                    scores['all'].append(review['score'])
         for k, v in sorted(scores.items()):
             stats = np.asarray(v).mean(0).tolist()
             stats = [round(x, 3) for x in stats]

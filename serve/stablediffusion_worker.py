@@ -67,8 +67,7 @@ model_semaphore = None
 def encode(image: Image):
     buffered = BytesIO()
     image.save(buffered, format="JPEG")
-    img_b64_str = base64.b64encode(buffered.getvalue()).decode()
-    return img_b64_str
+    return base64.b64encode(buffered.getvalue()).decode()
 
 
 def heart_beat_worker(controller):
@@ -122,7 +121,7 @@ class ModelWorker:
     def register_to_controller(self):
         logger.info("Register to controller")
 
-        url = self.controller_addr + "/register_worker"
+        url = f"{self.controller_addr}/register_worker"
         data = {
             "worker_name": self.worker_addr,
             "check_heart_beat": True,
@@ -139,7 +138,7 @@ class ModelWorker:
             f"worker_id: {worker_id}. "
         )
 
-        url = self.controller_addr + "/receive_heart_beat"
+        url = f"{self.controller_addr}/receive_heart_beat"
 
         while True:
             try:
@@ -188,14 +187,9 @@ class ModelWorker:
         images = self.pipe(prompt, num_inference_steps=20).images
         image = images[0]
 
-        # save image
-        # images[0].save("test.jpg")
-
-        pred_dict = {
+        return {
             "edited_image": encode(image),
         }
-
-        return pred_dict
 
     def generate_gate(self, params):
         try:

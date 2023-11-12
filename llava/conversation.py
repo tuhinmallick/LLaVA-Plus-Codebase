@@ -24,7 +24,7 @@ def make_it_small_html(text):
 
 
 def get_hr_html():
-    return f'<hr width="100%" size="1" color="silver" align="center">'
+    return '<hr width="100%" size="1" color="silver" align="center">'
 
 
 def get_placehold(text):
@@ -34,7 +34,7 @@ def get_placehold(text):
     res = '"thinking'
     timenow = len(text) % 21
     num_point = timenow // 3
-    for i in range(num_point):
+    for _ in range(num_point):
         res += "."
     res += '"'
     return res
@@ -90,9 +90,9 @@ class Conversation:
                 if message:
                     if type(message) is tuple:
                         message, _, _, _ = parse_msg(message)
-                    ret += role + ": " + message + self.sep
+                    ret += f"{role}: {message}{self.sep}"
                 else:
-                    ret += role + ":"
+                    ret += f"{role}:"
         elif self.sep_style == SeparatorStyle.TWO:
             seps = [self.sep, self.sep2]
             ret = self.system + seps[0]
@@ -100,9 +100,9 @@ class Conversation:
                 if message:
                     if type(message) is tuple:
                         message, _, _, _ = parse_msg(message)
-                    ret += role + ": " + message + seps[i % 2]
+                    ret += f"{role}: {message}{seps[i % 2]}"
                 else:
-                    ret += role + ":"
+                    ret += f"{role}:"
         elif self.sep_style == SeparatorStyle.MPT:
             ret = self.system + self.sep
             for role, message in messages:
@@ -114,7 +114,9 @@ class Conversation:
                     ret += role
         elif self.sep_style == SeparatorStyle.LLAMA_2:
             def wrap_sys(msg): return f"<<SYS>>\n{msg}\n<</SYS>>\n\n"
+
             def wrap_inst(msg): return f"[INST] {msg} [/INST]"
+
             ret = ""
 
             for i, (role, message) in enumerate(messages):
@@ -130,7 +132,7 @@ class Conversation:
                         message = wrap_inst(message)
                         ret += self.sep + message
                     else:
-                        ret += " " + message + " " + self.sep2
+                        ret += f" {message} {self.sep2}"
                 else:
                     ret += ""
             ret = ret.lstrip(self.sep)
@@ -256,11 +258,10 @@ class Conversation:
 
     def merge_output(self, ret, with_debug_parameter=False):
         # print(f'with_debug_parameter: {with_debug_parameter}')
-        assert isinstance(
-            ret, list), "ret should be a list, but got {}".format(type(ret))
+        assert isinstance(ret, list), f"ret should be a list, but got {type(ret)}"
 
-        ret_new = []
         i = 0
+        ret_new = []
         while i < len(ret):
             text: str = ret[i][0]
 
@@ -277,7 +278,7 @@ class Conversation:
             text = text.strip()
             # for the case with image
             if text.startswith('<img src="data:image/png;base64'):
-                if len(ret_new) > 0:
+                if ret_new:
                     ret_new[-1] = [ret_new[-1][0] + '\n' + ret[i][0], None]
                 else:
                     ret_new.append(ret[i])
@@ -297,8 +298,8 @@ class Conversation:
                     if (len(action_json) > 0):
                         # tool use branch
                         res_value = f'"thoughts🤔" {matches[0][0].strip()}\n' +\
-                             f'"actions🚀" {matches[0][1].strip()}\n' \
-                           +  f'"value👉" {matches[0][2].strip()}'
+                                 f'"actions🚀" {matches[0][1].strip()}\n' \
+                               +  f'"value👉" {matches[0][2].strip()}'
                         res_value = make_it_small_html(res_value)
 
                         # explore next
@@ -307,7 +308,7 @@ class Conversation:
                             # get next message
                             text_next: str = ret[i +
                                                  1][0].strip().replace("\n\n", "\n")
-                            if len(ret_new) > 0 and "model outputs:" in text_next:
+                            if ret_new and "model outputs:" in text_next:
                                 # auged ques
                                 text_next_html = make_it_small_html(text_next)
                                 res_value = res_value + get_hr_html() + text_next_html
@@ -319,50 +320,46 @@ class Conversation:
                                     matches_next2 = parse_tool_output(
                                         text_next2)
 
-                                    if matches_next2 is not None:
-                                        text_next2_html = f'"thoughts🤔" {matches_next2[0][0].strip()}\n' + \
-                                            f'"actions🚀" {matches_next2[0][1].strip()}\n' + \
-                                            f'"value👉"'
+                                    if matches_next2 is None:
+                                        res_value = res_value + get_hr_html() + make_it_small_html(text_next2)
+                                    else:
+                                        text_next2_html = (
+                                            f'"thoughts🤔" {matches_next2[0][0].strip()}\n'
+                                            + f'"actions🚀" {matches_next2[0][1].strip()}\n'
+                                            + '"value👉"'
+                                        )
                                         text_next2_html = make_it_small_html(
                                             text_next2_html)
                                         res_value = res_value + get_hr_html() + text_next2_html
-                                        res_value = res_value + \
-                                            f'\n{matches_next2[0][2].strip()}'
-                                        i += 1
-                                    else:
-                                        res_value = res_value + get_hr_html() + make_it_small_html(text_next2)
-                                        i += 1
+                                        res_value = f'{res_value}\n{matches_next2[0][2].strip()}'
+                                    i += 1
                                 i += 1
 
                         # post process for no debug parameters
                         if not with_debug_parameter:
-                            if matches_next2 is not None:
-                                res_value = matches_next2[0][2].strip()
-                            else:
-                                res_value = get_placehold(res_value)
-
-                        # add to ret_new
-                        ret_new.append([res_value, None])
-                    else:
-                        # regular conv branch
-                        if with_debug_parameter:
-                            res_value = f'"thoughts🤔" {matches[0][0].strip()}\n' +\
+                            res_value = (
+                                matches_next2[0][2].strip()
+                                if matches_next2 is not None
+                                else get_placehold(res_value)
+                            )
+                    elif with_debug_parameter:
+                        res_value = f'"thoughts🤔" {matches[0][0].strip()}\n' +\
                                  f'"actions🚀" {matches[0][1].strip()}\n' \
                                +  f'"value👉"\n'
-                            res_value = make_it_small_html(res_value)
-                            res_value = res_value + f'{matches[0][2].strip()}'
-                        else:
-                            res_value = f'{matches[0][2].strip()}'
-
-                        ret_new.append([res_value, None])
-                else:
-                    if with_debug_parameter:
-                        ret_new.append(ret[i])
+                        res_value = make_it_small_html(res_value)
+                        res_value = f'{res_value}{matches[0][2].strip()}'
                     else:
-                        ret_new.append([
-                            get_placehold(ret[i][0].strip()),
-                            None
-                        ])
+                        res_value = f'{matches[0][2].strip()}'
+
+                    # add to ret_new
+                    ret_new.append([res_value, None])
+                elif with_debug_parameter:
+                    ret_new.append(ret[i])
+                else:
+                    ret_new.append([
+                        get_placehold(ret[i][0].strip()),
+                        None
+                    ])
             else:
                 ret_new.append(ret[i])
             i += 1
@@ -386,8 +383,7 @@ class Conversation:
         buffered = BytesIO()
         image.save(buffered, format="JPEG")
         img_b64_str = base64.b64encode(buffered.getvalue()).decode()
-        img_str = f'<img src="data:image/png;base64,{img_b64_str}" alt="user upload image" />'
-        return img_str
+        return f'<img src="data:image/png;base64,{img_b64_str}" alt="user upload image" />'
 
     def to_gradio_chatbot(self, with_debug_parameter=False):
         ret = []
@@ -395,42 +391,37 @@ class Conversation:
             # if i % 2 == 0:
             if len(self.roles) > 2 and role == self.roles[2]:
                 continue
-            # if role == self.roles[0]:
-            if 1:
-                if type(msg) is tuple:
-                    import base64
-                    from io import BytesIO
-                    # msg, image, image_process_mode = msg
-                    msg, image, image_process_mode, sketch_mask = parse_msg(
-                        msg)
-                    if not isinstance(image, list):
-                        img_str = self.image_to_url(image)
-                        if i == 0:
-                            ret.append([img_str, None])
-                        msg = msg.replace('<image>', '').strip()
-                        if role == self.roles[1]:
-                            msg = self.tools_filter_msg(msg)
-                        if len(msg) > 0:
-                            ret.append([msg, None])
-                        if i != 0:
-                            ret.append([img_str, None])
-                    else:
-                        # a list of image
-                        if role == self.roles[1]:
-                            msg = self.tools_filter_msg(msg)
-                            msg = msg.replace('<image>', '').strip()
-                        if len(msg) > 0:
-                            ret.append([msg, None])
-                        for j, img in enumerate(image):
-                            img_str = self.image_to_url(img)
-                            ret.append([img_str, None])
-                else:
+            if type(msg) is tuple:
+                import base64
+                from io import BytesIO
+                # msg, image, image_process_mode = msg
+                msg, image, image_process_mode, sketch_mask = parse_msg(
+                    msg)
+                if not isinstance(image, list):
+                    img_str = self.image_to_url(image)
+                    if i == 0:
+                        ret.append([img_str, None])
+                    msg = msg.replace('<image>', '').strip()
                     if role == self.roles[1]:
                         msg = self.tools_filter_msg(msg)
-                    ret.append([msg, None])
+                    if len(msg) > 0:
+                        ret.append([msg, None])
+                    if i != 0:
+                        ret.append([img_str, None])
+                else:
+                    # a list of image
+                    if role == self.roles[1]:
+                        msg = self.tools_filter_msg(msg)
+                        msg = msg.replace('<image>', '').strip()
+                    if len(msg) > 0:
+                        ret.append([msg, None])
+                    for img in image:
+                        img_str = self.image_to_url(img)
+                        ret.append([img_str, None])
             else:
-                ret[-1][-1] = msg
-
+                if role == self.roles[1]:
+                    msg = self.tools_filter_msg(msg)
+                ret.append([msg, None])
         ret = self.merge_output(ret, with_debug_parameter=with_debug_parameter)
         return ret
 

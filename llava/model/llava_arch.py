@@ -77,7 +77,11 @@ class LlavaMetaModel:
         if pretrain_mm_mlp_adapter is not None:
             mm_projector_weights = torch.load(pretrain_mm_mlp_adapter, map_location='cpu')
             def get_w(weights, keyword):
-                return {k.split(keyword + '.')[1]: v for k, v in weights.items() if keyword in k}
+                return {
+                    k.split(f'{keyword}.')[1]: v
+                    for k, v in weights.items()
+                    if keyword in k
+                }
 
             self.mm_projector.load_state_dict(get_w(mm_projector_weights, 'mm_projector'))
 
@@ -101,7 +105,11 @@ class LlavaMetaForCausalLM(ABC):
     ):
         vision_tower = self.get_vision_tower()
         if vision_tower is None or images is None or input_ids.shape[1] == 1:
-            if past_key_values is not None and vision_tower is not None and images is not None and input_ids.shape[1] == 1:
+            if (
+                past_key_values is not None
+                and vision_tower is not None
+                and images is not None
+            ):
                 target_shape = past_key_values[-1][-1].shape[-2] + 1
                 attention_mask = torch.cat((attention_mask, torch.ones(
                     (attention_mask.shape[0], target_shape - attention_mask.shape[1]),
@@ -112,7 +120,7 @@ class LlavaMetaForCausalLM(ABC):
             return input_ids, position_ids, attention_mask, past_key_values, None, labels
 
         if type(images) is list or images.ndim == 5:
-            concat_images = torch.cat([image for image in images], dim=0)
+            concat_images = torch.cat(list(images), dim=0)
             image_features = self.encode_images(concat_images)
             split_sizes = [image.shape[0] for image in images]
             image_features = torch.split(image_features, split_sizes, dim=0)
@@ -152,7 +160,9 @@ class LlavaMetaForCausalLM(ABC):
             if num_images == 0:
                 cur_image_features = image_features[cur_image_idx]
                 cur_input_embeds_1 = self.get_model().embed_tokens(cur_input_ids)
-                cur_input_embeds = torch.cat([cur_input_embeds_1, cur_image_features[0:0]], dim=0)
+                cur_input_embeds = torch.cat(
+                    [cur_input_embeds_1, cur_image_features[:0]], dim=0
+                )
                 new_input_embeds.append(cur_input_embeds)
                 new_labels.append(labels[batch_idx])
                 cur_image_idx += 1
@@ -224,11 +234,7 @@ class LlavaMetaForCausalLM(ABC):
 
         new_input_embeds = torch.stack(new_input_embeds_padded, dim=0)
 
-        if _labels is None:
-            new_labels = None
-        else:
-            new_labels = new_labels_padded
-
+        new_labels = None if _labels is None else new_labels_padded
         if _attention_mask is None:
             attention_mask = None
         else:

@@ -155,12 +155,13 @@ def _convert_bloom_causal_lm_to_prefix_lm(model: BloomForCausalLM) -> BloomForCa
         alibi = slopes.view(1, num_heads, 1, 1) * diffs.view(1, 1, query_length, key_length)
         alibi = alibi.expand(batch_size, -1, -1, -1).reshape(-1, query_length, key_length)
         return alibi.to(dtype)
+
     KeyValueT = Tuple[torch.Tensor, torch.Tensor]
 
     def forward(self: BloomModel, input_ids: Optional[torch.LongTensor]=None, past_key_values: Optional[Tuple[KeyValueT, ...]]=None, attention_mask: Optional[torch.Tensor]=None, bidirectional_mask: Optional[torch.Tensor]=None, head_mask: Optional[torch.LongTensor]=None, inputs_embeds: Optional[torch.LongTensor]=None, use_cache: Optional[bool]=None, output_attentions: Optional[bool]=None, output_hidden_states: Optional[bool]=None, return_dict: Optional[bool]=None, **deprecated_arguments) -> Union[Tuple[torch.Tensor, ...], BaseModelOutputWithPastAndCrossAttentions]:
         if deprecated_arguments.pop('position_ids', False) is not False:
             warnings.warn('`position_ids` have no functionality in BLOOM and will be removed in v5.0.0. ' + 'You can safely ignore passing `position_ids`.', FutureWarning)
-        if len(deprecated_arguments) > 0:
+        if deprecated_arguments:
             raise ValueError(f'Got unexpected arguments: {deprecated_arguments}')
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -225,6 +226,7 @@ def _convert_bloom_causal_lm_to_prefix_lm(model: BloomForCausalLM) -> BloomForCa
         if not return_dict:
             return tuple((v for v in [hidden_states, presents, all_hidden_states, all_self_attentions] if v is not None))
         return BaseModelOutputWithPastAndCrossAttentions(last_hidden_state=hidden_states, past_key_values=presents, hidden_states=all_hidden_states, attentions=all_self_attentions)
+
     setattr(model.transformer, '_prepare_attn_mask', MethodType(_prepare_attn_mask, model.transformer))
     setattr(model.transformer, '_build_alibi_tensor', MethodType(_build_alibi_tensor, model.transformer))
     setattr(model.transformer, 'forward', MethodType(forward, model.transformer))
@@ -234,7 +236,7 @@ def _convert_bloom_causal_lm_to_prefix_lm(model: BloomForCausalLM) -> BloomForCa
         """Replacement forward method for BloomCausalLM."""
         if deprecated_arguments.pop('position_ids', False) is not False:
             warnings.warn('`position_ids` have no functionality in BLOOM and will be removed ' + 'in v5.0.0. You can safely ignore passing `position_ids`.', FutureWarning)
-        if len(deprecated_arguments) > 0:
+        if deprecated_arguments:
             raise ValueError(f'Got unexpected arguments: {deprecated_arguments}')
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         transformer_outputs = self.transformer(input_ids, past_key_values=past_key_values, attention_mask=attention_mask, bidirectional_mask=bidirectional_mask, head_mask=head_mask, inputs_embeds=inputs_embeds, use_cache=use_cache, output_attentions=output_attentions, output_hidden_states=output_hidden_states, return_dict=return_dict)
@@ -261,6 +263,7 @@ def _convert_bloom_causal_lm_to_prefix_lm(model: BloomForCausalLM) -> BloomForCa
         else:
             bidirectional_mask = torch.ones_like(input_ids)
         return {'input_ids': input_ids, 'past_key_values': past, 'use_cache': True, 'attention_mask': attention_mask, 'bidirectional_mask': bidirectional_mask}
+
     setattr(model, 'forward', MethodType(forward, model))
     setattr(model, 'prepare_inputs_for_generation', MethodType(prepare_inputs_for_generation, model))
     setattr(model, '_prefix_lm_converted', True)
@@ -396,7 +399,10 @@ def convert_hf_causal_lm_to_prefix_lm(model: CAUSAL_LM_TYPES) -> CAUSAL_LM_TYPES
     elif isinstance(model, OPTForCausalLM):
         return _convert_opt_causal_lm_to_prefix_lm(model)
     else:
-        raise TypeError(f'Cannot convert model to Prefix LM. ' + f'Model does not belong to set of supported HF models:' + f'\n{_SUPPORTED_HF_MODELS}')
+        raise TypeError(
+            f'Cannot convert model to Prefix LM. Model does not belong to set of supported HF models:'
+            + f'\n{_SUPPORTED_HF_MODELS}'
+        )
 
 def add_bidirectional_mask_if_missing(batch: Dict[str, Any]):
     """Attempts to add bidirectional_mask to batch if missing.

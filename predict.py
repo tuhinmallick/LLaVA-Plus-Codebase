@@ -18,7 +18,7 @@ import subprocess
 from threading import Thread
 
 import os
-os.environ["HUGGINGFACE_HUB_CACHE"] = os.getcwd() + "/weights"
+os.environ["HUGGINGFACE_HUB_CACHE"] = f"{os.getcwd()}/weights"
 
 # url for the weights mirror
 REPLICATE_WEIGHTS_URL = "https://weights.replicate.delivery/default"
@@ -93,28 +93,28 @@ class Predictor(BasePredictor):
         max_tokens: int = Input(description="Maximum number of tokens to generate. A word is generally 2-3 tokens", default=1024, ge=0),
     ) -> ConcatenateIterator[str]:
         """Run a single prediction on the model"""
-    
+
         conv_mode = "llava_v1"
         conv = conv_templates[conv_mode].copy()
-    
+
         image_data = load_image(str(image))
         image_tensor = self.image_processor.preprocess(image_data, return_tensors='pt')['pixel_values'].half().cuda()
-    
+
         # loop start
-    
+
         # just one turn, always prepend image token
         inp = DEFAULT_IMAGE_TOKEN + '\n' + prompt
         conv.append_message(conv.roles[0], inp)
 
         conv.append_message(conv.roles[1], None)
         prompt = conv.get_prompt()
-    
+
         input_ids = tokenizer_image_token(prompt, self.tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt').unsqueeze(0).cuda()
         stop_str = conv.sep if conv.sep_style != SeparatorStyle.TWO else conv.sep2
         keywords = [stop_str]
         stopping_criteria = KeywordsStoppingCriteria(keywords, self.tokenizer, input_ids)
         streamer = TextIteratorStreamer(self.tokenizer, skip_prompt=True, timeout=20.0)
-    
+
         with torch.inference_mode():
             thread = Thread(target=self.model.generate, kwargs=dict(
                 inputs=input_ids,
@@ -138,7 +138,7 @@ class Predictor(BasePredictor):
                     new_text = new_text[:-len(stop_str)].strip()
                     prepend_space = False
                 elif prepend_space:
-                    new_text = " " + new_text
+                    new_text = f" {new_text}"
                     prepend_space = False
                 if len(new_text):
                     yield new_text
@@ -148,10 +148,10 @@ class Predictor(BasePredictor):
     
 
 def load_image(image_file):
-    if image_file.startswith('http') or image_file.startswith('https'):
-        response = requests.get(image_file)
-        image = Image.open(BytesIO(response.content)).convert('RGB')
-    else:
-        image = Image.open(image_file).convert('RGB')
-    return image
+    if not image_file.startswith('http') and not image_file.startswith(
+        'https'
+    ):
+        return Image.open(image_file).convert('RGB')
+    response = requests.get(image_file)
+    return Image.open(BytesIO(response.content)).convert('RGB')
 

@@ -82,12 +82,12 @@ class ModelWorker:
         self.device = device
 
         # load clip
-        logger.info(f"Loading clip ...")
+        logger.info("Loading clip ...")
         self.model, self.preprocess = clip.load("ViT-L/14", device=device, jit=True)
 
 
         # load model
-        logger.info(f"Loading client ...")
+        logger.info("Loading client ...")
         self.client = ClipClient(
             url="https://knn.laion.ai/knn-service",
             indice_name=indice_name,
@@ -132,7 +132,7 @@ class ModelWorker:
     def register_to_controller(self):
         logger.info("Register to controller")
 
-        url = self.controller_addr + "/register_worker"
+        url = f"{self.controller_addr}/register_worker"
         data = {
             "worker_name": self.worker_addr,
             "check_heart_beat": True,
@@ -149,7 +149,7 @@ class ModelWorker:
             f"worker_id: {worker_id}. "
         )
 
-        url = self.controller_addr + "/receive_heart_beat"
+        url = f"{self.controller_addr}/receive_heart_beat"
 
         while True:
             try:
@@ -192,21 +192,19 @@ class ModelWorker:
         }
 
     def load_image(self, image_path: str) -> Image.Image:
-    
-        if os.path.exists(image_path):
-            image_source = Image.open(image_path).convert("RGB")
-        else:
-            # base64 coding
-            image_source = Image.open(BytesIO(base64.b64decode(image_path))).convert("RGB")
 
-        return image_source
+        return (
+            Image.open(image_path).convert("RGB")
+            if os.path.exists(image_path)
+            else Image.open(BytesIO(base64.b64decode(image_path))).convert("RGB")
+        )
 
     def generate_stream_func(self, model, params, device):
         # get inputs
         image_path = params["image"]
         # load image and run models
         image = self.load_image(image_path)
-        
+
 
         if not os.getenv("SEND_IMAGE", False):
 
@@ -228,15 +226,13 @@ class ModelWorker:
             save_name = "test.jpg"
             image.save(save_name)
             beach_results = self.client.query(image=save_name)
-            
+
 
         w, h = image.size
-        pred_dict = {
+        return {
             "retrieval_results": beach_results,
             "size": [h, w],  # H,W
         }
-
-        return pred_dict
 
     def generate_gate(self, params):
         try:

@@ -113,7 +113,7 @@ def load_pretrained_model(model_path, model_base, model_name, load_8bit=False, l
             model = AutoModelForCausalLM.from_pretrained(model_base, low_cpu_mem_usage=True, **kwargs)
             print(f"Loading LoRA weights from {model_path}")
             model = PeftModel.from_pretrained(model, model_path)
-            print(f"Merging weights")
+            print("Merging weights")
             model = model.merge_and_unload()
             print('Convert to FP16...')
             model.to(torch.float16)

@@ -34,8 +34,7 @@ def load_image(image_path):
 def encode(image: Image):
     buffered = BytesIO()
     image.save(buffered, format="JPEG")
-    img_b64_str = base64.b64encode(buffered.getvalue()).decode()
-    return img_b64_str
+    return base64.b64encode(buffered.getvalue()).decode()
 
 
 def main():
@@ -45,14 +44,14 @@ def main():
         worker_addr = args.worker_address
     else:
         controller_addr = args.controller_address
-        ret = requests.post(controller_addr + "/refresh_all_workers")
-        ret = requests.post(controller_addr + "/list_models")
+        ret = requests.post(f"{controller_addr}/refresh_all_workers")
+        ret = requests.post(f"{controller_addr}/list_models")
         models = ret.json()["models"]
         models.sort()
         print(f"Models: {models}")
 
         ret = requests.post(
-            controller_addr + "/get_worker_address", json={"model": model_name}
+            f"{controller_addr}/get_worker_address", json={"model": model_name}
         )
         worker_addr = ret.json()["address"]
         print(f"worker_addr: {worker_addr}")
@@ -75,9 +74,7 @@ def main():
     }
     tic = time.time()
     response = requests.post(
-        worker_addr + "/worker_generate",
-        headers=headers,
-        json=datas,
+        f"{worker_addr}/worker_generate", headers=headers, json=datas
     )
     toc = time.time()
     print(f"Time: {toc - tic:.3f}s")

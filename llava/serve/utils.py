@@ -42,7 +42,7 @@ def show_mask(mask: torch.Tensor, image: Image, random_color=True) -> Image:
     if random_color:
         color = np.concatenate([np.random.random(3), np.array([0.8])], axis=0)
     else:
-        color = np.array([30/255, 144/255, 255/255, 0.6])
+        color = np.array([30/255, 144/255, 1, 0.6])
     h, w = mask.shape[-2:]
     mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
 

@@ -37,9 +37,7 @@ def is_none(value):
         return True
     if type(value) is str and value.lower() == 'nan':
         return True
-    if type(value) is str and value.lower() == 'none':
-        return True
-    return False
+    return type(value) is str and value.lower() == 'none'
 
 def get_options(row, options):
     parsed_options = []
@@ -62,92 +60,86 @@ def eval_model(args):
     questions = get_chunk(questions, args.num_chunks, args.chunk_idx)
     answers_file = os.path.expanduser(args.answers_file)
     os.makedirs(os.path.dirname(answers_file), exist_ok=True)
-    ans_file = open(answers_file, "w")
+    with open(answers_file, "w") as ans_file:
+        if 'plain' in model_name and 'finetune' not in model_name.lower() and 'mmtag' not in args.conv_mode:
+            args.conv_mode = args.conv_mode + '_mmtag'
+            print(f'It seems that this is a plain model, but it is not using a mmtag prompt, auto switching to {args.conv_mode}.')
 
-    if 'plain' in model_name and 'finetune' not in model_name.lower() and 'mmtag' not in args.conv_mode:
-        args.conv_mode = args.conv_mode + '_mmtag'
-        print(f'It seems that this is a plain model, but it is not using a mmtag prompt, auto switching to {args.conv_mode}.')
+        for index, row in tqdm(questions.iterrows(), total=len(questions)):
+            options = get_options(row, all_options)
+            cur_option_char = all_options[:len(options)]
 
-    for index, row in tqdm(questions.iterrows(), total=len(questions)):
-        options = get_options(row, all_options)
-        cur_option_char = all_options[:len(options)]
-
-        if args.all_rounds:
-            num_rounds = len(options)
-        else:
-            num_rounds = 1
-
-        for round_idx in range(num_rounds):
-            idx = row['index']
-            question = row['question']
-            hint = row['hint']
-            image = load_image_from_base64(row['image'])
-            if not is_none(hint):
-                question = hint + '\n' + question
-            for option_char, option in zip(all_options[:len(options)], options):
-                question = question + '\n' + option_char + '. ' + option
-            qs = cur_prompt = question
-            if model.config.mm_use_im_start_end:
-                qs = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN + '\n' + qs
-            else:
-                qs = DEFAULT_IMAGE_TOKEN + '\n' + qs
-
-            if args.single_pred_prompt:
-                if args.lang == 'cn':
-                    qs = qs + '\n' + "请直接回答选项字母。"
+            num_rounds = len(options) if args.all_rounds else 1
+            for round_idx in range(num_rounds):
+                idx = row['index']
+                question = row['question']
+                hint = row['hint']
+                image = load_image_from_base64(row['image'])
+                if not is_none(hint):
+                    question = hint + '\n' + question
+                for option_char, option in zip(all_options[:len(options)], options):
+                    question = question + '\n' + option_char + '. ' + option
+                qs = cur_prompt = question
+                if model.config.mm_use_im_start_end:
+                    qs = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN + '\n' + qs
                 else:
-                    qs = qs + '\n' + "Answer with the option's letter from the given choices directly."
+                    qs = DEFAULT_IMAGE_TOKEN + '\n' + qs
 
-            conv = conv_templates[args.conv_mode].copy()
-            conv.append_message(conv.roles[0], qs)
-            conv.append_message(conv.roles[1], None)
-            prompt = conv.get_prompt()
+                if args.single_pred_prompt:
+                    if args.lang == 'cn':
+                        qs = qs + '\n' + "请直接回答选项字母。"
+                    else:
+                        qs = qs + '\n' + "Answer with the option's letter from the given choices directly."
 
-            input_ids = tokenizer_image_token(prompt, tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt').unsqueeze(0).cuda()
+                conv = conv_templates[args.conv_mode].copy()
+                conv.append_message(conv.roles[0], qs)
+                conv.append_message(conv.roles[1], None)
+                prompt = conv.get_prompt()
 
-            image_tensor = process_images([image], image_processor, model.config)[0]
-            # image_tensor = image_processor.preprocess(image, return_tensors='pt')['pixel_values'][0]
+                input_ids = tokenizer_image_token(prompt, tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt').unsqueeze(0).cuda()
 
-            stop_str = conv.sep if conv.sep_style != SeparatorStyle.TWO else conv.sep2
+                image_tensor = process_images([image], image_processor, model.config)[0]
+                # image_tensor = image_processor.preprocess(image, return_tensors='pt')['pixel_values'][0]
 
-            with torch.inference_mode():
-                output_ids = model.generate(
-                    input_ids,
-                    images=image_tensor.unsqueeze(0).half().cuda(),
-                    do_sample=True if args.temperature > 0 else False,
-                    temperature=args.temperature,
-                    top_p=args.top_p,
-                    num_beams=args.num_beams,
-                    # no_repeat_ngram_size=3,
-                    max_new_tokens=1024,
-                    use_cache=True)
+                stop_str = conv.sep if conv.sep_style != SeparatorStyle.TWO else conv.sep2
 
-            input_token_len = input_ids.shape[1]
-            n_diff_input_output = (input_ids != output_ids[:, :input_token_len]).sum().item()
-            if n_diff_input_output > 0:
-                print(f'[Warning] {n_diff_input_output} output_ids are not the same as the input_ids')
-            outputs = tokenizer.batch_decode(output_ids[:, input_token_len:], skip_special_tokens=True)[0]
-            outputs = outputs.strip()
-            if outputs.endswith(stop_str):
-                outputs = outputs[:-len(stop_str)]
-            outputs = outputs.strip()
+                with torch.inference_mode():
+                    output_ids = model.generate(
+                        input_ids,
+                        images=image_tensor.unsqueeze(0).half().cuda(),
+                        do_sample=args.temperature > 0,
+                        temperature=args.temperature,
+                        top_p=args.top_p,
+                        num_beams=args.num_beams,
+                        max_new_tokens=1024,
+                        use_cache=True,
+                    )
 
-            ans_id = shortuuid.uuid()
-            ans_file.write(json.dumps({"question_id": idx,
-                                    "round_id": round_idx,
-                                    "prompt": cur_prompt,
-                                    "text": outputs,
-                                    "options": options,
-                                    "option_char": cur_option_char,
-                                    "answer_id": ans_id,
-                                    "model_id": model_name,
-                                    "metadata": {}}) + "\n")
-            ans_file.flush()
+                input_token_len = input_ids.shape[1]
+                n_diff_input_output = (input_ids != output_ids[:, :input_token_len]).sum().item()
+                if n_diff_input_output > 0:
+                    print(f'[Warning] {n_diff_input_output} output_ids are not the same as the input_ids')
+                outputs = tokenizer.batch_decode(output_ids[:, input_token_len:], skip_special_tokens=True)[0]
+                outputs = outputs.strip()
+                if outputs.endswith(stop_str):
+                    outputs = outputs[:-len(stop_str)]
+                outputs = outputs.strip()
 
-            # rotate options
-            options = options[1:] + options[:1]
-            cur_option_char = cur_option_char[1:] + cur_option_char[:1]
-    ans_file.close()
+                ans_id = shortuuid.uuid()
+                ans_file.write(json.dumps({"question_id": idx,
+                                        "round_id": round_idx,
+                                        "prompt": cur_prompt,
+                                        "text": outputs,
+                                        "options": options,
+                                        "option_char": cur_option_char,
+                                        "answer_id": ans_id,
+                                        "model_id": model_name,
+                                        "metadata": {}}) + "\n")
+                ans_file.flush()
+
+                # rotate options
+                options = options[1:] + options[:1]
+                cur_option_char = cur_option_char[1:] + cur_option_char[:1]
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

@@ -35,8 +35,7 @@ def load_image(image_path):
 def encode(image: Image):
     buffered = BytesIO()
     image.save(buffered, format="JPEG")
-    img_b64_str = base64.b64encode(buffered.getvalue()).decode()
-    return img_b64_str
+    return base64.b64encode(buffered.getvalue()).decode()
 
 
 def main():
@@ -46,9 +45,9 @@ def main():
         worker_addr = args.worker_address
     else:
         controller_addr = args.controller_address
-    
+
         ret = requests.post(
-            controller_addr + "/get_worker_address", json={"model": model_name}
+            f"{controller_addr}/get_worker_address", json={"model": model_name}
         )
         worker_addr = ret.json()["address"]
         print(f"worker_addr: {worker_addr}")
@@ -68,13 +67,11 @@ def main():
         "image": img_arg,
         "point": args.point,
         "refimg": img_arg,
-        
+
     }
     tic = time.time()
     response = requests.post(
-        worker_addr + "/worker_generate",
-        headers=headers,
-        json=datas,
+        f"{worker_addr}/worker_generate", headers=headers, json=datas
     )
     toc = time.time()
     print(f"Time: {toc - tic:.3f}s")
